@@ -11,7 +11,9 @@ import {
   Trash2, 
   Flame, 
   Wind,
-  Bell
+  Bell,
+  Download,
+  Play
 } from 'lucide-react';
 
 function App() {
@@ -22,6 +24,8 @@ function App() {
   const [inputIp, setInputIp] = useState(ipAddress);
   const [showConfig, setShowConfig] = useState(false);
   const [fetchInterval, setFetchInterval] = useState(1000); // ms
+  const [isSimulation, setIsSimulation] = useState(false);
+  const [isCalibrating, setIsCalibrating] = useState(false);
 
   // Connection & Data States
   const [connectionStatus, setConnectionStatus] = useState('disconnected'); // 'connected' | 'disconnected' | 'reconnecting'
@@ -38,7 +42,7 @@ function App() {
     {
       id: 'init',
       time: new Date().toLocaleTimeString(),
-      message: 'System started. Configure ESP32 IP to begin monitoring.',
+      message: 'System started. Configure ESP32 IP or enable Simulation Mode to begin monitoring.',
       type: 'info'
     }
   ]);
@@ -51,9 +55,15 @@ function App() {
     ammoniaMin: 9999
   });
 
-  // Track previous danger state to detect transitions
+  // Interactive Chart States
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const svgRef = useRef(null);
+
+  // Track previous states to detect transitions
   const prevDangerousRef = useRef(false);
   const consecutiveFailures = useRef(0);
+  const simRandomWalkRef = useRef({ methane: 150.0, ammonia: 45.0 });
 
   // Helper to add log messages
   const addLog = (message, type = 'info') => {
@@ -66,17 +76,93 @@ function App() {
     setEventLogs(prev => [newLog, ...prev.slice(0, 49)]); // Limit to 50 logs
   };
 
+  // Toggle Simulation Mode
+  const handleToggleSimulation = (e) => {
+    const enabled = e.target.checked;
+    setIsSimulation(enabled);
+    setHistory([]);
+    setStats({
+      methaneMax: 0,
+      methaneMin: 9999,
+      ammoniaMax: 0,
+      ammoniaMin: 9999
+    });
+    consecutiveFailures.current = 0;
+    
+    if (enabled) {
+      setConnectionStatus('connected');
+      addLog('Simulation Mode activated. Feeding mock telemetry data.', 'success');
+    } else {
+      setConnectionStatus('disconnected');
+      setGasData({ methane: 0, ammonia: 0, isDangerous: false, status: 'Disconnected' });
+      addLog('Simulation Mode deactivated. Connecting to hardware node...', 'info');
+    }
+  };
+
+  // Trigger Remote Calibration on ESP32
+  const handleRemoteCalibration = async () => {
+    if (isSimulation || connectionStatus !== 'connected') return;
+
+    setIsCalibrating(true);
+    addLog('Initiating remote sensor calibration on ESP32...', 'info');
+
+    try {
+      const response = await fetch(`http://${ipAddress}/calibrate`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      setIsCalibrating(false);
+      addLog(`Remote Calibration complete. New baselines: MQ-6 R0 = ${data.mq6R0}Ω, MQ-135 R0 = ${data.mq135R0}Ω.`, 'success');
+      alert(`Calibration Successful!\nMQ-6 R0: ${data.mq6R0} Ohm\nMQ-135 R0: ${data.mq135R0} Ohm`);
+    } catch (err) {
+      setIsCalibrating(false);
+      addLog(`Remote calibration request failed: ${err.message}`, 'danger');
+      alert(`Calibration Failed: ${err.message}`);
+    }
+  };
+
+  // Export Data to CSV
+  const handleExportCSV = () => {
+    if (history.length === 0) {
+      alert('No telemetry history available to export.');
+      return;
+    }
+
+    const headers = 'Timestamp,Methane (PPM),Ammonia (PPM),Danger Flag\n';
+    const rows = history.map(d => {
+      const isDangerousFlag = (d.methane > 1000 || d.ammonia > 300) ? 'YES' : 'NO';
+      return `"${d.time}",${d.methane.toFixed(2)},${d.ammonia.toFixed(2)},${isDangerousFlag}`;
+    }).join('\n');
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(headers + rows);
+    const link = document.createElement('a');
+    link.setAttribute('href', csvContent);
+    link.setAttribute('download', `hazguard_telemetry_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addLog('Telemetry history successfully exported to CSV.', 'info');
+  };
+
   // Save IP Address
   const handleSaveConfig = (e) => {
     e.preventDefault();
-    // Validate IP address format (simple check)
     const cleanedIp = inputIp.trim().replace(/^https?:\/\//, '');
     localStorage.setItem('esp32_ip', cleanedIp);
     setIpAddress(cleanedIp);
     setShowConfig(false);
     consecutiveFailures.current = 0;
-    setConnectionStatus('reconnecting');
-    addLog(`IP address changed to ${cleanedIp}. Reconnecting...`, 'info');
+    
+    if (!isSimulation) {
+      setConnectionStatus('reconnecting');
+      addLog(`IP address changed to ${cleanedIp}. Reconnecting...`, 'info');
+    }
   };
 
   // Clear Event Logs
@@ -102,8 +188,94 @@ function App() {
     addLog('Session min/max statistics reset.', 'info');
   };
 
-  // Data Polling Loop
+  // Simulation Mode loop
   useEffect(() => {
+    if (!isSimulation) return;
+
+    const simInterval = setInterval(() => {
+      // Create random walk values
+      const prevVal = simRandomWalkRef.current;
+      
+      // Random walk drift
+      let methaneDrift = (Math.random() - 0.5) * 20;
+      let ammoniaDrift = (Math.random() - 0.5) * 5;
+
+      // Random critical spikes (5% chance of warning, 2% chance of emergency)
+      const spikeRoll = Math.random();
+      if (spikeRoll < 0.02) {
+        methaneDrift = 900 + Math.random() * 400; // Emergency Methane spike
+      } else if (spikeRoll < 0.04) {
+        ammoniaDrift = 280 + Math.random() * 80;  // Emergency Ammonia spike
+      }
+
+      let newMethane = Math.max(20.0, prevVal.methane + methaneDrift);
+      let newAmmonia = Math.max(5.0, prevVal.ammonia + ammoniaDrift);
+
+      // Keep within bounds if not spiking
+      if (newMethane > 2000) newMethane = 1800;
+      if (newAmmonia > 600) newAmmonia = 500;
+
+      simRandomWalkRef.current = { methane: newMethane, ammonia: newAmmonia };
+
+      const isMethaneHigh = newMethane > 1000;
+      const isAmmoniaHigh = newAmmonia > 300;
+      const isDangerousVal = isMethaneHigh || isAmmoniaHigh;
+      const statusText = isDangerousVal ? "Danger: High gas levels detected!" : "Gas levels are normal.";
+
+      setGasData({
+        methane: newMethane,
+        ammonia: newAmmonia,
+        isDangerous: isDangerousVal,
+        status: statusText
+      });
+
+      // Update Statistics
+      setStats(prev => ({
+        methaneMax: Math.max(prev.methaneMax, newMethane),
+        methaneMin: prev.methaneMin === 9999 ? newMethane : Math.min(prev.methaneMin, newMethane),
+        ammoniaMax: Math.max(prev.ammoniaMax, newAmmonia),
+        ammoniaMin: prev.ammoniaMin === 9999 ? newAmmonia : Math.min(prev.ammoniaMin, newAmmonia)
+      }));
+
+      // Update History
+      setHistory(prev => {
+        const newHistory = [...prev, {
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          methane: newMethane,
+          ammonia: newAmmonia
+        }];
+        if (newHistory.length > 30) {
+          newHistory.shift();
+        }
+        return newHistory;
+      });
+
+      // Warning and Danger Event triggers
+      if (isDangerousVal && !prevDangerousRef.current) {
+        addLog(`SIMULATION CRITICAL: Gas warning levels exceeded! (${statusText})`, 'danger');
+      } else if (!isDangerousVal && prevDangerousRef.current) {
+        addLog('Simulation Recovery: Gas levels returned to normal.', 'success');
+      }
+
+      if (!isDangerousVal) {
+        if (newMethane > 500 && newMethane <= 1000 && Math.random() < 0.2) {
+          addLog(`SIMULATION WARNING: Methane rising: ${newMethane.toFixed(0)} ppm (Threshold: 1000)`, 'warning');
+        }
+        if (newAmmonia > 150 && newAmmonia <= 300 && Math.random() < 0.2) {
+          addLog(`SIMULATION WARNING: Ammonia rising: ${newAmmonia.toFixed(0)} ppm (Threshold: 300)`, 'warning');
+        }
+      }
+
+      prevDangerousRef.current = isDangerousVal;
+    }, fetchInterval);
+
+    return () => clearInterval(simInterval);
+  }, [isSimulation, fetchInterval]);
+
+  // Data Polling Loop (Only active when NOT simulating)
+  useEffect(() => {
+    if (isSimulation) return;
+
     let active = true;
     let timerId = null;
 
@@ -217,14 +389,13 @@ function App() {
       }
     };
 
-    // Trigger immediate fetch
     fetchData();
 
     return () => {
       active = false;
       if (timerId) clearTimeout(timerId);
     };
-  }, [ipAddress, fetchInterval]);
+  }, [ipAddress, fetchInterval, isSimulation]);
 
   // Derive alert levels for UI card colors
   const getAlertLevel = (val, threshold) => {
@@ -236,31 +407,60 @@ function App() {
   const methaneLevel = getAlertLevel(gasData.methane, 1000);
   const ammoniaLevel = getAlertLevel(gasData.ammonia, 300);
 
+  // SVG Chart Dimensions Setup
+  const width = 1000;
+  const height = 220;
+  const paddingLeft = 50;
+  const paddingRight = 20;
+  const paddingTop = 20;
+  const paddingBottom = 30;
+
+  const chartWidth = width - paddingLeft - paddingRight;
+  const chartHeight = height - paddingTop - paddingBottom;
+
+  const maxMethane = 2000;
+  const maxAmmonia = 600;
+
+  // Handle SVG Mouse hover for Interactive Tooltip
+  const handleMouseMove = (e) => {
+    if (!svgRef.current || history.length < 2) return;
+
+    const rect = svgRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const clientPercentX = mouseX / rect.width;
+    const chartPercentX = (clientPercentX * width - paddingLeft) / chartWidth;
+
+    const index = Math.min(
+      Math.max(Math.round(chartPercentX * (history.length - 1)), 0),
+      history.length - 1
+    );
+
+    if (index >= 0 && index < history.length) {
+      setHoveredIndex(index);
+      
+      // Compute tooltip placement
+      const x = paddingLeft + (index / (history.length - 1)) * chartWidth;
+      setTooltipPos({
+        x: x > width - 180 ? x - 170 : x + 15,
+        y: paddingTop + 10
+      });
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setHoveredIndex(null);
+  };
+
   // SVG Chart Coordinate calculations
   const renderSvgChart = () => {
     if (history.length < 2) {
       return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
           <Activity size={20} style={{ marginRight: '8px', animation: 'spin 2s linear infinite' }} />
-          <span>Waiting for real-time sensor data telemetry...</span>
+          <span>Waiting for telemetry stream...</span>
         </div>
       );
     }
-
-    const width = 1000;
-    const height = 220;
-    const paddingLeft = 50;
-    const paddingRight = 20;
-    const paddingTop = 20;
-    const paddingBottom = 30;
-
-    const chartWidth = width - paddingLeft - paddingRight;
-    const chartHeight = height - paddingTop - paddingBottom;
-
-    // Fixed scales to make comparison visual
-    // Methane max: 2000 ppm, Ammonia max: 600 ppm
-    const maxMethane = 2000;
-    const maxAmmonia = 600;
 
     const pointsMethane = history.map((d, i) => {
       const x = paddingLeft + (i / (history.length - 1)) * chartWidth;
@@ -293,8 +493,20 @@ function App() {
     // Generate Grid Lines (4 horizontal lines)
     const gridYValues = [0.25, 0.5, 0.75, 1];
 
+    const hoveredData = hoveredIndex !== null ? history[hoveredIndex] : null;
+    const hoveredMethaneY = hoveredIndex !== null ? pointsMethane[hoveredIndex].y : 0;
+    const hoveredAmmoniaY = hoveredIndex !== null ? pointsAmmonia[hoveredIndex].y : 0;
+    const hoveredX = hoveredIndex !== null ? pointsMethane[hoveredIndex].x : 0;
+
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%">
+      <svg 
+        ref={svgRef}
+        viewBox={`0 0 ${width} ${height}`} 
+        width="100%" 
+        height="100%"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
         <defs>
           <linearGradient id="gradient-methane" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent-cyan)" stopOpacity="0.4" />
@@ -383,7 +595,7 @@ function App() {
           NH3 LIMIT (300 PPM)
         </text>
 
-        {/* X Axis labels (time timestamps) */}
+        {/* X Axis labels (timestamps) */}
         {history.map((d, i) => {
           if (i % 5 !== 0 && i !== history.length - 1) return null;
           const x = paddingLeft + (i / (history.length - 1)) * chartWidth;
@@ -395,7 +607,7 @@ function App() {
               textAnchor="middle" 
               className="chart-label-text"
             >
-              {d.time.split(' ')[0]}
+              {d.time}
             </text>
           );
         })}
@@ -408,8 +620,8 @@ function App() {
         <path d={buildPath(pointsMethane)} className="chart-line-methane" />
         <path d={buildPath(pointsAmmonia)} className="chart-line-ammonia" />
 
-        {/* Interactive nodes at the last point */}
-        {pointsMethane.length > 0 && (
+        {/* Last node dots */}
+        {hoveredIndex === null && pointsMethane.length > 0 && (
           <>
             <circle cx={pointsMethane[pointsMethane.length - 1].x} cy={pointsMethane[pointsMethane.length - 1].y} r="5" fill="var(--accent-cyan)" />
             <circle cx={pointsMethane[pointsMethane.length - 1].x} cy={pointsMethane[pointsMethane.length - 1].y} r="10" fill="none" stroke="var(--accent-cyan)" strokeOpacity="0.5" strokeWidth="1.5">
@@ -417,7 +629,7 @@ function App() {
             </circle>
           </>
         )}
-        {pointsAmmonia.length > 0 && (
+        {hoveredIndex === null && pointsAmmonia.length > 0 && (
           <>
             <circle cx={pointsAmmonia[pointsAmmonia.length - 1].x} cy={pointsAmmonia[pointsAmmonia.length - 1].y} r="5" fill="var(--accent-purple)" />
             <circle cx={pointsAmmonia[pointsAmmonia.length - 1].x} cy={pointsAmmonia[pointsAmmonia.length - 1].y} r="10" fill="none" stroke="var(--accent-purple)" strokeOpacity="0.5" strokeWidth="1.5">
@@ -425,6 +637,45 @@ function App() {
             </circle>
           </>
         )}
+
+        {/* Interactive hover elements */}
+        {hoveredIndex !== null && hoveredData && (
+          <g>
+            {/* Vertical crosshair line */}
+            <line 
+              x1={hoveredX} 
+              y1={paddingTop} 
+              x2={hoveredX} 
+              y2={height - paddingBottom} 
+              className="chart-tooltip-line" 
+            />
+
+            {/* Glowing dots at data intersections */}
+            <circle cx={hoveredX} cy={hoveredMethaneY} r="6" fill="var(--accent-cyan)" className="chart-tooltip-dot" />
+            <circle cx={hoveredX} cy={hoveredAmmoniaY} r="6" fill="var(--accent-purple)" className="chart-tooltip-dot" />
+
+            {/* Glassmorphic SVG Tooltip Box */}
+            <g className="chart-tooltip-group" transform={`translate(${tooltipPos.x}, ${tooltipPos.y})`}>
+              <rect width="150" height="75" className="chart-tooltip-bg" />
+              <text x="12" y="20" className="chart-tooltip-text-title">Time: {hoveredData.time}</text>
+              <text x="12" y="42" className="chart-tooltip-text-val">
+                Methane: <tspan fill="var(--accent-cyan)" fontWeight="600">{hoveredData.methane.toFixed(1)} ppm</tspan>
+              </text>
+              <text x="12" y="60" className="chart-tooltip-text-val">
+                Ammonia: <tspan fill="var(--accent-purple)" fontWeight="600">{hoveredData.ammonia.toFixed(1)} ppm</tspan>
+              </text>
+            </g>
+          </g>
+        )}
+
+        {/* Invisible Overlay for mouse tracking */}
+        <rect 
+          x={paddingLeft} 
+          y={paddingTop} 
+          width={chartWidth} 
+          height={chartHeight} 
+          className="chart-interactive-overlay" 
+        />
       </svg>
     );
   };
@@ -436,16 +687,29 @@ function App() {
         <div className="header-title-section">
           <Activity className="header-icon" size={32} />
           <div>
-            <h1>HAZARDOUS GAS DETECTOR</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h1>HAZARDOUS GAS DETECTOR</h1>
+              {isSimulation && (
+                <div className="simulation-active-badge">
+                  <span></span>Simulating
+                </div>
+              )}
+            </div>
             <div className="header-subtitle">Real-Time IoT Safety Telemetry</div>
           </div>
         </div>
 
         {/* Connection status and manager settings toggle */}
         <div className="connection-panel">
-          <div className={`status-badge ${connectionStatus}`}>
-            <span className={`status-dot ${connectionStatus === 'reconnecting' ? 'pulsing' : ''}`}></span>
-            {connectionStatus === 'connected' ? 'ESP32 Online' : connectionStatus === 'reconnecting' ? 'Reconnecting' : 'ESP32 Offline'}
+          <div className={`status-badge ${isSimulation ? 'connected' : connectionStatus}`}>
+            <span className={`status-dot ${(!isSimulation && connectionStatus === 'reconnecting') ? 'pulsing' : ''}`}></span>
+            {isSimulation 
+              ? 'Demo Mode Active' 
+              : connectionStatus === 'connected' 
+                ? 'ESP32 Online' 
+                : connectionStatus === 'reconnecting' 
+                  ? 'Reconnecting' 
+                  : 'ESP32 Offline'}
           </div>
 
           <button 
@@ -462,18 +726,54 @@ function App() {
       {showConfig && (
         <form className="config-dropdown" onSubmit={handleSaveConfig}>
           <h3>Connection Setup</h3>
-          <div className="input-group">
-            <label htmlFor="ip-input">ESP32 IP / Hostname</label>
-            <input 
-              id="ip-input"
-              type="text" 
-              value={inputIp} 
-              onChange={(e) => setInputIp(e.target.value)}
-              placeholder="e.g. 192.168.1.15"
-              className="ip-input"
-              required 
-            />
+          
+          {/* Simulation mode switch */}
+          <div className="sim-mode-toggle-container">
+            <div className="sim-label-wrap">
+              <Play size={14} className="text-secondary" />
+              <label htmlFor="sim-toggle-checkbox" style={{ fontSize: '13px', fontWeight: '600' }}>Demo/Simulation Mode</label>
+            </div>
+            <label className="sim-toggle-switch">
+              <input 
+                id="sim-toggle-checkbox"
+                type="checkbox" 
+                checked={isSimulation} 
+                onChange={handleToggleSimulation} 
+              />
+              <span className="sim-toggle-slider"></span>
+            </label>
           </div>
+
+          {!isSimulation && (
+            <>
+              <div className="input-group">
+                <label htmlFor="ip-input">ESP32 IP / Hostname</label>
+                <input 
+                  id="ip-input"
+                  type="text" 
+                  value={inputIp} 
+                  onChange={(e) => setInputIp(e.target.value)}
+                  placeholder="e.g. 192.168.1.15"
+                  className="ip-input"
+                  required 
+                />
+              </div>
+
+              {connectionStatus === 'connected' && (
+                <button 
+                  type="button" 
+                  className="btn-secondary btn-calibrate" 
+                  onClick={handleRemoteCalibration}
+                  disabled={isCalibrating}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  <RefreshCw size={14} className={isCalibrating ? 'animate-spin' : ''} />
+                  {isCalibrating ? 'Calibrating...' : 'Recalibrate Sensors (Clean Air)'}
+                </button>
+              )}
+            </>
+          )}
+
           <div className="input-group">
             <label htmlFor="poll-input">Refresh Interval ({fetchInterval / 1000}s)</label>
             <select 
@@ -488,6 +788,7 @@ function App() {
               <option value="5000">Slow (5.0 sec)</option>
             </select>
           </div>
+
           <button type="submit" className="save-btn">Connect & Save</button>
         </form>
       )}
@@ -498,7 +799,7 @@ function App() {
           <Bell className="banner-icon" size={28} />
           <div>
             <h2>CRITICAL ALERT</h2>
-            <p>{gasData.status} The buzzer is active. Please ventilate the area immediately and check safety hazards.</p>
+            <p>{gasData.status} The alarm buzzer is sounding. Please ventilate the area immediately and check safety hazards.</p>
           </div>
         </div>
       )}
@@ -604,13 +905,22 @@ function App() {
               <span>Ammonia (0-600 ppm)</span>
             </div>
             {history.length > 0 && (
-              <button 
-                onClick={handleResetStats}
-                className="clear-log-btn" 
-                style={{ marginLeft: '12px' }}
-              >
-                Reset Stats
-              </button>
+              <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
+                <button 
+                  onClick={handleExportCSV}
+                  className="btn-secondary"
+                  title="Export telemetry history to CSV file"
+                >
+                  <Download size={12} />
+                  Export CSV
+                </button>
+                <button 
+                  onClick={handleResetStats}
+                  className="clear-log-btn" 
+                >
+                  Reset Stats
+                </button>
+              </div>
             )}
           </div>
         </div>

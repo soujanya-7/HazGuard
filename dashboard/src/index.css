@@ -759,3 +759,179 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Version 2.0 Added Styles */
+
+/* Interactive Chart Tooltip */
+.chart-tooltip-group {
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.chart-tooltip-bg {
+  fill: var(--bg-secondary);
+  stroke: var(--card-border);
+  stroke-width: 1;
+  rx: 8;
+  ry: 8;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));
+}
+
+.chart-tooltip-text-title {
+  fill: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+
+.chart-tooltip-text-val {
+  fill: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum";
+}
+
+.chart-tooltip-dot {
+  stroke-width: 1.5;
+  stroke: var(--bg-secondary);
+}
+
+.chart-interactive-overlay {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+/* Spinner for Calibration loading state */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Remote Calibrate and CSV Buttons */
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-calibrate {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--color-safe);
+}
+
+.btn-calibrate:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--text-primary);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+/* Simulation Toggle UI */
+.sim-mode-toggle-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sim-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+}
+
+.sim-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.sim-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: .3s;
+  border-radius: 20px;
+}
+
+.sim-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--text-secondary);
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .sim-toggle-slider {
+  background-color: var(--color-safe);
+}
+
+input:checked + .sim-toggle-slider:before {
+  transform: translateX(20px);
+  background-color: #fff;
+}
+
+/* Simulation Active Indicator Banner */
+.simulation-active-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-safe);
+  background: var(--color-safe-glow);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 4px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.simulation-active-badge span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-safe);
+  animation: blink 1s infinite alternate;
+}
+
