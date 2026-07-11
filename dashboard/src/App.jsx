@@ -13,10 +13,18 @@ import {
   Wind,
   Bell,
   Download,
-  Play
+  Play,
+  ArrowRight,
+  ShieldAlert,
+  Server,
+  HardDrive,
+  Layers
 } from 'lucide-react';
 
 function App() {
+  // Navigation Router State
+  const [view, setView] = useState('landing'); // 'landing' | 'dashboard'
+
   // Config States
   const [ipAddress, setIpAddress] = useState(() => {
     return localStorage.getItem('esp32_ip') || '192.168.1.100';
@@ -28,7 +36,7 @@ function App() {
   const [isCalibrating, setIsCalibrating] = useState(false);
 
   // Connection & Data States
-  const [connectionStatus, setConnectionStatus] = useState('disconnected'); // 'connected' | 'disconnected' | 'reconnecting'
+  const [connectionStatus, setConnectionStatus] = useState('disconnected'); 
   const [gasData, setGasData] = useState({
     methane: 0,
     ammonia: 0,
@@ -73,7 +81,7 @@ function App() {
       message,
       type
     };
-    setEventLogs(prev => [newLog, ...prev.slice(0, 49)]); // Limit to 50 logs
+    setEventLogs(prev => [newLog, ...prev.slice(0, 49)]); 
   };
 
   // Toggle Simulation Mode
@@ -188,30 +196,26 @@ function App() {
     addLog('Session min/max statistics reset.', 'info');
   };
 
-  // Simulation Mode loop
+  // Simulation Mode loop (Only active when in simulation AND dashboard view)
   useEffect(() => {
-    if (!isSimulation) return;
+    if (!isSimulation || view !== 'dashboard') return;
 
     const simInterval = setInterval(() => {
-      // Create random walk values
       const prevVal = simRandomWalkRef.current;
       
-      // Random walk drift
       let methaneDrift = (Math.random() - 0.5) * 20;
       let ammoniaDrift = (Math.random() - 0.5) * 5;
 
-      // Random critical spikes (5% chance of warning, 2% chance of emergency)
       const spikeRoll = Math.random();
       if (spikeRoll < 0.02) {
-        methaneDrift = 900 + Math.random() * 400; // Emergency Methane spike
+        methaneDrift = 900 + Math.random() * 400; 
       } else if (spikeRoll < 0.04) {
-        ammoniaDrift = 280 + Math.random() * 80;  // Emergency Ammonia spike
+        ammoniaDrift = 280 + Math.random() * 80;  
       }
 
       let newMethane = Math.max(20.0, prevVal.methane + methaneDrift);
       let newAmmonia = Math.max(5.0, prevVal.ammonia + ammoniaDrift);
 
-      // Keep within bounds if not spiking
       if (newMethane > 2000) newMethane = 1800;
       if (newAmmonia > 600) newAmmonia = 500;
 
@@ -229,7 +233,6 @@ function App() {
         status: statusText
       });
 
-      // Update Statistics
       setStats(prev => ({
         methaneMax: Math.max(prev.methaneMax, newMethane),
         methaneMin: prev.methaneMin === 9999 ? newMethane : Math.min(prev.methaneMin, newMethane),
@@ -237,7 +240,6 @@ function App() {
         ammoniaMin: prev.ammoniaMin === 9999 ? newAmmonia : Math.min(prev.ammoniaMin, newAmmonia)
       }));
 
-      // Update History
       setHistory(prev => {
         const newHistory = [...prev, {
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -250,38 +252,28 @@ function App() {
         return newHistory;
       });
 
-      // Warning and Danger Event triggers
       if (isDangerousVal && !prevDangerousRef.current) {
         addLog(`SIMULATION CRITICAL: Gas warning levels exceeded! (${statusText})`, 'danger');
       } else if (!isDangerousVal && prevDangerousRef.current) {
         addLog('Simulation Recovery: Gas levels returned to normal.', 'success');
       }
 
-      if (!isDangerousVal) {
-        if (newMethane > 500 && newMethane <= 1000 && Math.random() < 0.2) {
-          addLog(`SIMULATION WARNING: Methane rising: ${newMethane.toFixed(0)} ppm (Threshold: 1000)`, 'warning');
-        }
-        if (newAmmonia > 150 && newAmmonia <= 300 && Math.random() < 0.2) {
-          addLog(`SIMULATION WARNING: Ammonia rising: ${newAmmonia.toFixed(0)} ppm (Threshold: 300)`, 'warning');
-        }
-      }
-
       prevDangerousRef.current = isDangerousVal;
     }, fetchInterval);
 
     return () => clearInterval(simInterval);
-  }, [isSimulation, fetchInterval]);
+  }, [isSimulation, fetchInterval, view]);
 
-  // Data Polling Loop (Only active when NOT simulating)
+  // Data Polling Loop (Only active when NOT simulating AND in dashboard view)
   useEffect(() => {
-    if (isSimulation) return;
+    if (isSimulation || view !== 'dashboard') return;
 
     let active = true;
     let timerId = null;
 
     const fetchData = async () => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200); // 1.2s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 1200); 
 
       try {
         const response = await fetch(`http://${ipAddress}/data`, {
@@ -298,7 +290,6 @@ function App() {
         
         if (!active) return;
 
-        // Successful connection
         consecutiveFailures.current = 0;
         
         setConnectionStatus(prev => {
@@ -308,7 +299,6 @@ function App() {
           return 'connected';
         });
 
-        // Parse PPM values
         const methaneVal = Number(data.methane) || 0;
         const ammoniaVal = Number(data.ammonia) || 0;
         const isDangerousVal = Boolean(data.isDangerous);
@@ -320,7 +310,6 @@ function App() {
           status: data.status || 'Active'
         });
 
-        // Update Statistics
         setStats(prev => ({
           methaneMax: Math.max(prev.methaneMax, methaneVal),
           methaneMin: prev.methaneMin === 9999 ? methaneVal : Math.min(prev.methaneMin, methaneVal),
@@ -328,7 +317,6 @@ function App() {
           ammoniaMin: prev.ammoniaMin === 9999 ? ammoniaVal : Math.min(prev.ammoniaMin, ammoniaVal)
         }));
 
-        // Update History
         setHistory(prev => {
           const newHistory = [...prev, {
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -341,21 +329,10 @@ function App() {
           return newHistory;
         });
 
-        // Detect Alert transitions
         if (isDangerousVal && !prevDangerousRef.current) {
           addLog(`CRITICAL ALERT: Hazardous gas levels exceeded! (${data.status})`, 'danger');
         } else if (!isDangerousVal && prevDangerousRef.current) {
           addLog('System Recovery: Gas levels returned to normal.', 'success');
-        }
-        
-        // Minor warning alerts (sub-critical thresholds)
-        if (!isDangerousVal) {
-          if (methaneVal > 500 && methaneVal <= 1000) {
-            addLog(`Elevated Methane level: ${methaneVal.toFixed(0)} ppm (Threshold: 1000 ppm)`, 'warning');
-          }
-          if (ammoniaVal > 150 && ammoniaVal <= 300) {
-            addLog(`Elevated Ammonia level: ${ammoniaVal.toFixed(0)} ppm (Threshold: 300 ppm)`, 'warning');
-          }
         }
 
         prevDangerousRef.current = isDangerousVal;
@@ -366,7 +343,6 @@ function App() {
         
         consecutiveFailures.current += 1;
         
-        // Adjust status based on failure count
         if (consecutiveFailures.current >= 3) {
           setConnectionStatus(prev => {
             if (prev === 'connected') {
@@ -383,7 +359,6 @@ function App() {
         }
       }
 
-      // Schedule next fetch
       if (active) {
         timerId = setTimeout(fetchData, fetchInterval);
       }
@@ -395,7 +370,7 @@ function App() {
       active = false;
       if (timerId) clearTimeout(timerId);
     };
-  }, [ipAddress, fetchInterval, isSimulation]);
+  }, [ipAddress, fetchInterval, isSimulation, view]);
 
   // Derive alert levels for UI card colors
   const getAlertLevel = (val, threshold) => {
@@ -438,7 +413,6 @@ function App() {
     if (index >= 0 && index < history.length) {
       setHoveredIndex(index);
       
-      // Compute tooltip placement
       const x = paddingLeft + (index / (history.length - 1)) * chartWidth;
       setTooltipPos({
         x: x > width - 180 ? x - 170 : x + 15,
@@ -486,11 +460,9 @@ function App() {
       return `${buildPath(points)} L ${endX.toFixed(1)} ${baseY} L ${startX.toFixed(1)} ${baseY} Z`;
     };
 
-    // Safe thresholds in chart coordinates
     const methaneThresholdY = height - paddingBottom - (1000 / maxMethane) * chartHeight;
     const ammoniaThresholdY = height - paddingBottom - (300 / maxAmmonia) * chartHeight;
 
-    // Generate Grid Lines (4 horizontal lines)
     const gridYValues = [0.25, 0.5, 0.75, 1];
 
     const hoveredData = hoveredIndex !== null ? history[hoveredIndex] : null;
@@ -536,7 +508,6 @@ function App() {
                 textAnchor="end" 
                 className="chart-label-text"
               >
-                {/* Left labels (Methane) */}
                 {(ratio * maxMethane).toFixed(0)}
               </text>
               <text 
@@ -545,7 +516,6 @@ function App() {
                 textAnchor="start" 
                 className="chart-label-text"
               >
-                {/* Right labels (Ammonia) */}
                 {(ratio * maxAmmonia).toFixed(0)}
               </text>
             </g>
@@ -595,7 +565,7 @@ function App() {
           NH3 LIMIT (300 PPM)
         </text>
 
-        {/* X Axis labels (timestamps) */}
+        {/* X Axis labels */}
         {history.map((d, i) => {
           if (i % 5 !== 0 && i !== history.length - 1) return null;
           const x = paddingLeft + (i / (history.length - 1)) * chartWidth;
@@ -641,7 +611,6 @@ function App() {
         {/* Interactive hover elements */}
         {hoveredIndex !== null && hoveredData && (
           <g>
-            {/* Vertical crosshair line */}
             <line 
               x1={hoveredX} 
               y1={paddingTop} 
@@ -650,11 +619,9 @@ function App() {
               className="chart-tooltip-line" 
             />
 
-            {/* Glowing dots at data intersections */}
             <circle cx={hoveredX} cy={hoveredMethaneY} r="6" fill="var(--accent-cyan)" className="chart-tooltip-dot" />
             <circle cx={hoveredX} cy={hoveredAmmoniaY} r="6" fill="var(--accent-purple)" className="chart-tooltip-dot" />
 
-            {/* Glassmorphic SVG Tooltip Box */}
             <g className="chart-tooltip-group" transform={`translate(${tooltipPos.x}, ${tooltipPos.y})`}>
               <rect width="150" height="75" className="chart-tooltip-bg" />
               <text x="12" y="20" className="chart-tooltip-text-title">Time: {hoveredData.time}</text>
@@ -668,7 +635,6 @@ function App() {
           </g>
         )}
 
-        {/* Invisible Overlay for mouse tracking */}
         <rect 
           x={paddingLeft} 
           y={paddingTop} 
@@ -680,31 +646,258 @@ function App() {
     );
   };
 
+  // LANDING PAGE VIEW
+  if (view === 'landing') {
+    return (
+      <div className="landing-container">
+        {/* Navigation Bar */}
+        <header className="landing-header">
+          <div className="landing-nav-wrapper">
+            <a href="#home" className="landing-logo" onClick={() => window.scrollTo(0, 0)}>
+              <Activity className="logo-icon" size={24} />
+              <span className="logo-text">HAZGUARD</span>
+            </a>
+            
+            <nav className="landing-nav-links">
+              <a href="#features" className="nav-link">Features</a>
+              <a href="#architecture" className="nav-link">Architecture</a>
+              <a href="#specs" className="nav-link">Tech Specs</a>
+              <button 
+                className="btn-primary" 
+                style={{ padding: '8px 18px', fontSize: '13px' }}
+                onClick={() => setView('dashboard')}
+              >
+                Launch Console
+                <ArrowRight size={14} />
+              </button>
+            </nav>
+          </div>
+        </header>
+
+        {/* Hero Banner Section */}
+        <section id="home" className="landing-hero animate-fade-in">
+          <div className="hero-badge">Industrial Safety Telemetry</div>
+          <h2 className="hero-title">Next-Gen Hazardous Gas Monitoring & Analysis</h2>
+          <p className="hero-desc">
+            HazGuard bridges physical hardware gas sensors with high-performance dashboards, ensuring real-time monitoring, early alarm triggers, and automatic WiFi emergency fallback portals.
+          </p>
+          <div className="hero-ctas">
+            <button className="btn-primary" onClick={() => setView('dashboard')}>
+              Launch Telemetry Console
+              <ArrowRight size={16} />
+            </button>
+            <a href="#features" className="btn-secondary" style={{ padding: '14px 28px', fontSize: '15px' }}>
+              Learn More
+            </a>
+          </div>
+        </section>
+
+        {/* Features Block Section */}
+        <section id="features" className="landing-section">
+          <div className="section-header">
+            <span className="section-tag">Key Pillars</span>
+            <h2 className="section-title">Active Prevention Systems</h2>
+            <p className="section-desc">
+              Designed from the ground up for reliable industrial and domestic hazard shielding.
+            </p>
+          </div>
+
+          <div className="landing-features-grid">
+            <div className="landing-feature-card">
+              <div className="feature-icon-box">
+                <Flame size={22} />
+              </div>
+              <h3 className="feature-card-title">Dual-Gas Monitoring</h3>
+              <p className="feature-card-desc">
+                Continuous logging of Methane (combustibles) and Ammonia (toxics) using highly-calibrated math models directly matching sensor datasheets.
+              </p>
+            </div>
+
+            <div className="landing-feature-card">
+              <div className="feature-icon-box">
+                <ShieldAlert size={22} />
+              </div>
+              <h3 className="feature-card-title">Buzzer Alert Patterns</h3>
+              <p className="feature-card-desc">
+                Active alarm beeps (150ms cycles) toggle dynamically at the hardware level the instant gas PPM safety thresholds are breached.
+              </p>
+            </div>
+
+            <div className="landing-feature-card">
+              <div className="feature-icon-box">
+                <Wifi size={22} />
+              </div>
+              <h3 className="feature-card-title">Emergency AP Fallback</h3>
+              <p className="feature-card-desc">
+                WiFi failure initiates a fallback mode. The ESP32 launches its own access point (**`HazGuard-Emergency-AP`**), ensuring connection is never lost.
+              </p>
+            </div>
+
+            <div className="landing-feature-card">
+              <div className="feature-icon-box">
+                <Download size={22} />
+              </div>
+              <h3 className="feature-card-title">CSV Telemetry Exporter</h3>
+              <p className="feature-card-desc">
+                Export session logs containing detailed timestamps and raw level values straight to CSV file format for industrial safety reporting.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Architecture Diagram Section */}
+        <section id="architecture" className="landing-section" style={{ background: 'rgba(255,255,255,0.01)' }}>
+          <div className="section-header">
+            <span className="section-tag">Information Flow</span>
+            <h2 className="section-title">System Architecture</h2>
+            <p className="section-desc">
+              How the physical hardware components securely relay information to the web interface.
+            </p>
+          </div>
+
+          <div className="architecture-diagram">
+            <div className="arch-node">
+              <Wind className="arch-icon" size={24} />
+              <div className="arch-node-title">1. Gas Sensors</div>
+              <div className="arch-node-desc">MQ-6 & MQ-135 sensors track gaseous densities.</div>
+            </div>
+
+            <div className="arch-arrow">➔</div>
+
+            <div className="arch-node">
+              <Layers className="arch-icon" size={24} />
+              <div className="arch-node-title">2. ESP32 Processing</div>
+              <div className="arch-node-desc">EMA filters digital signal, computes logarithmic PPM.</div>
+            </div>
+
+            <div className="arch-arrow">➔</div>
+
+            <div className="arch-node">
+              <Server className="arch-icon" size={24} />
+              <div className="arch-node-title">3. CORS API Server</div>
+              <div className="arch-node-desc">ESP32 serves JSON data on `/data` route.</div>
+            </div>
+
+            <div className="arch-arrow">➔</div>
+
+            <div className="arch-node">
+              <HardDrive className="arch-icon" size={24} />
+              <div className="arch-node-title">4. React Console</div>
+              <div className="arch-node-desc">Client fetches metrics and updates interactive SVG charts.</div>
+            </div>
+          </div>
+        </section>
+
+        {/* Specs Table Section */}
+        <section id="specs" className="landing-section">
+          <div className="section-header">
+            <span className="section-tag">Specifications</span>
+            <h2 className="section-title">Technical Specifications</h2>
+            <p className="section-desc">
+              Hardware tolerances and network configurations.
+            </p>
+          </div>
+
+          <div className="specs-table-container">
+            <table className="specs-table">
+              <thead>
+                <tr>
+                  <th>Metric / System Parameter</th>
+                  <th>Configuration / Standard</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Microcontroller Node</td>
+                  <td>ESP32 Dev Module (WROOM-32D)</td>
+                </tr>
+                <tr>
+                  <td>Operating Voltage</td>
+                  <td>5V DC (via USB or external header)</td>
+                </tr>
+                <tr>
+                  <td>Average Active Current Draw</td>
+                  <td>~220 mA (MQ sensor heaters require continuous power)</td>
+                </tr>
+                <tr>
+                  <td>Methane (CH4) Sensor limits</td>
+                  <td>100 PPM to 10,000 PPM (MQ-6)</td>
+                </tr>
+                <tr>
+                  <td>Ammonia (NH3) Sensor limits</td>
+                  <td>10 PPM to 300 PPM (MQ-135)</td>
+                </tr>
+                <tr>
+                  <td>Data Polling Protocol</td>
+                  <td>CORS-Enabled HTTP REST API (Port 80 JSON response)</td>
+                </tr>
+                <tr>
+                  <td>Digital Noise Filtering</td>
+                  <td>Exponential Moving Average Algorithm ($\alpha = 0.15$)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="landing-footer">
+          <div className="footer-content">
+            <div className="footer-logo-desc">
+              <a href="#home" className="landing-logo">
+                <Activity className="logo-icon" size={20} />
+                <span className="logo-text" style={{ fontSize: '16px' }}>HAZGUARD</span>
+              </a>
+              <span className="footer-desc">© 2026 HazGuard IoT Systems. All rights reserved.</span>
+            </div>
+            
+            <div className="footer-links">
+              <a href="#features" className="footer-link">Features</a>
+              <a href="#architecture" className="footer-link">Architecture</a>
+              <a href="#specs" className="footer-link">Tech Specs</a>
+              <button 
+                onClick={() => setView('dashboard')} 
+                className="footer-link" 
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                Launch Console
+              </button>
+            </div>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  // TELEMETRY CONSOLE VIEW
   return (
-    <div className="app-container">
-      {/* Header Panel */}
+    <div className="app-container animate-fade-in">
+      {/* Console Header */}
       <header className="app-header">
         <div className="header-title-section">
-          <Activity className="header-icon" size={32} />
+          <button className="console-back-btn" onClick={() => setView('landing')}>
+            Back to Home
+          </button>
+          <div style={{ height: '24px', width: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+          <Activity className="header-icon" size={24} />
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1>HAZARDOUS GAS DETECTOR</h1>
+              <h1 style={{ fontSize: '20px', margin: 0 }}>HAZGUARD CONSOLE</h1>
               {isSimulation && (
                 <div className="simulation-active-badge">
                   <span></span>Simulating
                 </div>
               )}
             </div>
-            <div className="header-subtitle">Real-Time IoT Safety Telemetry</div>
           </div>
         </div>
 
-        {/* Connection status and manager settings toggle */}
+        {/* Connection status and settings */}
         <div className="connection-panel">
           <div className={`status-badge ${isSimulation ? 'connected' : connectionStatus}`}>
             <span className={`status-dot ${(!isSimulation && connectionStatus === 'reconnecting') ? 'pulsing' : ''}`}></span>
             {isSimulation 
-              ? 'Demo Mode Active' 
+              ? 'Demo Mode' 
               : connectionStatus === 'connected' 
                 ? 'ESP32 Online' 
                 : connectionStatus === 'reconnecting' 
@@ -727,7 +920,6 @@ function App() {
         <form className="config-dropdown" onSubmit={handleSaveConfig}>
           <h3>Connection Setup</h3>
           
-          {/* Simulation mode switch */}
           <div className="sim-mode-toggle-container">
             <div className="sim-label-wrap">
               <Play size={14} className="text-secondary" />
