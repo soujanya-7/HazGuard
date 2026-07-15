@@ -18,12 +18,19 @@ import {
   ShieldAlert,
   Server,
   HardDrive,
-  Layers
+  Layers,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 function App() {
   // Navigation Router State
   const [view, setView] = useState('landing'); // 'landing' | 'dashboard'
+
+  // Dynamic Theme state ('light' | 'dark')
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'light';
+  });
 
   // Config States
   const [ipAddress, setIpAddress] = useState(() => {
@@ -82,6 +89,13 @@ function App() {
       type
     };
     setEventLogs(prev => [newLog, ...prev.slice(0, 49)]); 
+  };
+
+  // Toggle Theme
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    localStorage.setItem('theme', nextTheme);
   };
 
   // Toggle Simulation Mode
@@ -321,7 +335,7 @@ function App() {
           const newHistory = [...prev, {
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
             methane: methaneVal,
-            ammonia: ammoniaVal
+            ammonia: newAmmonia
           }];
           if (newHistory.length > 30) {
             newHistory.shift();
@@ -423,6 +437,44 @@ function App() {
 
   const handleMouseLeave = () => {
     setHoveredIndex(null);
+  };
+
+  // Circular SVG Gauge Renderer
+  const renderCircularGauge = (value, maxValue, alertLevel) => {
+    const radius = 50;
+    const circumference = 2 * Math.PI * radius; // ~314.16
+    const percent = Math.min((value / maxValue) * 100, 100);
+    const strokeDashoffset = circumference - (percent / 100) * circumference;
+
+    const strokeColor = alertLevel === 'danger' ? 'var(--color-danger)'
+                      : alertLevel === 'warning' ? 'var(--color-warning)'
+                      : 'var(--color-safe)';
+
+    return (
+      <div className="circular-gauge-container">
+        <svg width="140" height="140" className="gauge-svg">
+          <circle 
+            cx="70" 
+            cy="70" 
+            r={radius} 
+            className="gauge-track"
+          />
+          <circle 
+            cx="70" 
+            cy="70" 
+            r={radius} 
+            className="gauge-value-arc"
+            stroke={strokeColor}
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+          />
+        </svg>
+        <div className="gauge-center-content">
+          <span className="gauge-center-val">{value.toFixed(1)}</span>
+          <span className="gauge-center-unit">ppm</span>
+        </div>
+      </div>
+    );
   };
 
   // SVG Chart Coordinate calculations
@@ -646,157 +698,181 @@ function App() {
     );
   };
 
-  // LANDING PAGE VIEW
-  if (view === 'landing') {
-    return (
-      <div className="landing-container">
-        {/* Navigation Bar */}
-        <header className="landing-header">
-          <div className="landing-nav-wrapper">
-            <a href="#home" className="landing-logo" onClick={() => window.scrollTo(0, 0)}>
-              <Activity className="logo-icon" size={24} />
-              <span className="logo-text">HAZGUARD</span>
-            </a>
-            
-            <nav className="landing-nav-links">
-              <a href="#features" className="nav-link">Features</a>
-              <a href="#architecture" className="nav-link">Architecture</a>
-              <a href="#specs" className="nav-link">Tech Specs</a>
-              <button 
-                className="btn-primary" 
-                style={{ padding: '8px 18px', fontSize: '13px' }}
-                onClick={() => setView('dashboard')}
-              >
-                Launch Console
-                <ArrowRight size={14} />
-              </button>
-            </nav>
-          </div>
-        </header>
+  return (
+    <div className={`app-wrapper theme-${theme}`}>
+      {/* LANDING PAGE VIEW */}
+      {view === 'landing' ? (
+        <div className="landing-container">
+          {/* Navigation Bar */}
+          <header className="landing-header">
+            <div className="landing-nav-wrapper">
+              <a href="#home" className="landing-logo" onClick={() => window.scrollTo(0, 0)}>
+                <Activity className="logo-icon" size={24} />
+                <span className="logo-text">HAZGUARD</span>
+              </a>
+              
+              <nav className="landing-nav-links">
+                <a href="#features" className="nav-link">Features</a>
+                <a href="#architecture" className="nav-link">Architecture</a>
+                <a href="#specs" className="nav-link">Tech Specs</a>
+                
+                {/* Dynamic Theme Toggle in Navigation */}
+                <button 
+                  className="theme-toggle-btn"
+                  onClick={toggleTheme}
+                  title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+                  style={{ width: '32px', height: '32px', borderRadius: '8px' }}
+                >
+                  {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+                </button>
 
-        {/* Hero Banner Section */}
-        <section id="home" className="landing-hero animate-fade-in">
-          <div className="hero-badge">Industrial Safety Telemetry</div>
-          <h2 className="hero-title">Next-Gen Hazardous Gas Monitoring & Analysis</h2>
-          <p className="hero-desc">
-            HazGuard bridges physical hardware gas sensors with high-performance dashboards, ensuring real-time monitoring, early alarm triggers, and automatic WiFi emergency fallback portals.
-          </p>
-          <div className="hero-ctas">
-            <button className="btn-primary" onClick={() => setView('dashboard')}>
-              Launch Telemetry Console
-              <ArrowRight size={16} />
-            </button>
-            <a href="#features" className="btn-secondary" style={{ padding: '14px 28px', fontSize: '15px' }}>
-              Learn More
-            </a>
-          </div>
-        </section>
+                <button 
+                  className="btn-primary" 
+                  style={{ padding: '8px 18px', fontSize: '13px' }}
+                  onClick={() => setView('dashboard')}
+                >
+                  Launch Console
+                  <ArrowRight size={14} />
+                </button>
+              </nav>
+            </div>
+          </header>
 
-        {/* Features Block Section */}
-        <section id="features" className="landing-section">
-          <div className="section-header">
-            <span className="section-tag">Key Pillars</span>
-            <h2 className="section-title">Active Prevention Systems</h2>
-            <p className="section-desc">
-              Designed from the ground up for reliable industrial and domestic hazard shielding.
-            </p>
-          </div>
-
-          <div className="landing-features-grid">
-            <div className="landing-feature-card">
-              <div className="feature-icon-box">
-                <Flame size={22} />
+          {/* Split-Hero Layout displaying the 3D Industrial Asset */}
+          <section id="home" className="landing-hero animate-fade-in">
+            <div className="hero-content-side">
+              <div className="hero-badge">Industrial Safety Telemetry</div>
+              <h2 className="hero-title">Next-Gen Hazardous Gas Monitoring</h2>
+              <p className="hero-desc">
+                HazGuard bridges physical hardware gas sensors with high-performance dashboards, ensuring real-time monitoring, early alarm triggers, and automatic WiFi emergency fallback portals.
+              </p>
+              <div className="hero-ctas">
+                <button className="btn-primary" onClick={() => setView('dashboard')}>
+                  Launch Telemetry Console
+                  <ArrowRight size={16} />
+                </button>
+                <a href="#features" className="btn-secondary" style={{ padding: '14px 28px', fontSize: '15px' }}>
+                  Learn More
+                </a>
               </div>
-              <h3 className="feature-card-title">Dual-Gas Monitoring</h3>
-              <p className="feature-card-desc">
-                Continuous logging of Methane (combustibles) and Ammonia (toxics) using highly-calibrated math models directly matching sensor datasheets.
+            </div>
+
+            {/* Visual Side for 3D Product Image */}
+            <div className="hero-image-side">
+              <div className="hero-glow-element"></div>
+              <img 
+                src="/hazguard_sensor_3d.jpg" 
+                alt="HazGuard Smart Pipeline Gas Sensor Node" 
+                className="hero-3d-visual"
+              />
+            </div>
+          </section>
+
+          {/* Features Block Section */}
+          <section id="features" className="landing-section">
+            <div className="section-header">
+              <span className="section-tag">Key Pillars</span>
+              <h2 className="section-title">Active Prevention Systems</h2>
+              <p className="section-desc">
+                Designed from the ground up for reliable industrial and domestic hazard shielding.
               </p>
             </div>
 
-            <div className="landing-feature-card">
-              <div className="feature-icon-box">
-                <ShieldAlert size={22} />
+            <div className="landing-features-grid">
+              <div className="landing-feature-card">
+                <div className="feature-icon-box">
+                  <Flame size={22} />
+                </div>
+                <h3 className="feature-card-title">Dual-Gas Monitoring</h3>
+                <p className="feature-card-desc">
+                  Continuous logging of Methane (combustibles) and Ammonia (toxics) using highly-calibrated math models directly matching sensor datasheets.
+                </p>
               </div>
-              <h3 className="feature-card-title">Buzzer Alert Patterns</h3>
-              <p className="feature-card-desc">
-                Active alarm beeps (150ms cycles) toggle dynamically at the hardware level the instant gas PPM safety thresholds are breached.
+
+              <div className="landing-feature-card">
+                <div className="feature-icon-box">
+                  <ShieldAlert size={22} />
+                </div>
+                <h3 className="feature-card-title">Buzzer Alert Patterns</h3>
+                <p className="feature-card-desc">
+                  Active alarm beeps (150ms cycles) toggle dynamically at the hardware level the instant gas PPM safety thresholds are breached.
+                </p>
+              </div>
+
+              <div className="landing-feature-card">
+                <div className="feature-icon-box">
+                  <Wifi size={22} />
+                </div>
+                <h3 className="feature-card-title">Emergency AP Fallback</h3>
+                <p className="feature-card-desc">
+                  WiFi failure initiates a fallback mode. The ESP32 launches its own access point (**`HazGuard-Emergency-AP`**), ensuring connection is never lost.
+                </p>
+              </div>
+
+              <div className="landing-feature-card">
+                <div className="feature-icon-box">
+                  <Download size={22} />
+                </div>
+                <h3 className="feature-card-title">CSV Telemetry Exporter</h3>
+                <p className="feature-card-desc">
+                  Export session logs containing detailed timestamps and raw level values straight to CSV file format for industrial safety reporting.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Architecture Diagram Section */}
+          <section id="architecture" className="landing-section" style={{ background: 'rgba(255,255,255,0.01)' }}>
+            <div className="section-header">
+              <span className="section-tag">Information Flow</span>
+              <h2 className="section-title">System Architecture</h2>
+              <p className="section-desc">
+                How the physical hardware components securely relay information to the web interface.
               </p>
             </div>
 
-            <div className="landing-feature-card">
-              <div className="feature-icon-box">
-                <Wifi size={22} />
+            <div className="architecture-diagram">
+              <div className="arch-node">
+                <Wind className="arch-icon" size={24} />
+                <div className="arch-node-title">1. Gas Sensors</div>
+                <div className="arch-node-desc">MQ-6 & MQ-135 sensors track gaseous densities.</div>
               </div>
-              <h3 className="feature-card-title">Emergency AP Fallback</h3>
-              <p className="feature-card-desc">
-                WiFi failure initiates a fallback mode. The ESP32 launches its own access point (**`HazGuard-Emergency-AP`**), ensuring connection is never lost.
+
+              <div className="arch-arrow-line"></div>
+
+              <div className="arch-node">
+                <Layers className="arch-icon" size={24} />
+                <div className="arch-node-title">2. ESP32 Processing</div>
+                <div className="arch-node-desc">EMA filters digital signal, computes logarithmic PPM.</div>
+              </div>
+
+              <div className="arch-arrow-line"></div>
+
+              <div className="arch-node">
+                <Server className="arch-icon" size={24} />
+                <div className="arch-node-title">3. CORS API Server</div>
+                <div className="arch-node-desc">ESP32 serves JSON data on `/data` route.</div>
+              </div>
+
+              <div className="arch-arrow-line"></div>
+
+              <div className="arch-node">
+                <HardDrive className="arch-icon" size={24} />
+                <div className="arch-node-title">4. React Console</div>
+                <div className="arch-node-desc">Client fetches metrics and updates interactive SVG charts.</div>
+              </div>
+            </div>
+          </section>
+
+          {/* Specs Table Section */}
+          <section id="specs" className="landing-section">
+            <div className="section-header">
+              <span className="section-tag">Specifications</span>
+              <h2 className="section-title">Technical Specifications</h2>
+              <p className="section-desc">
+                Hardware tolerances and network configurations.
               </p>
             </div>
-
-            <div className="landing-feature-card">
-              <div className="feature-icon-box">
-                <Download size={22} />
-              </div>
-              <h3 className="feature-card-title">CSV Telemetry Exporter</h3>
-              <p className="feature-card-desc">
-                Export session logs containing detailed timestamps and raw level values straight to CSV file format for industrial safety reporting.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Architecture Diagram Section */}
-        <section id="architecture" className="landing-section" style={{ background: 'rgba(255,255,255,0.01)' }}>
-          <div className="section-header">
-            <span className="section-tag">Information Flow</span>
-            <h2 className="section-title">System Architecture</h2>
-            <p className="section-desc">
-              How the physical hardware components securely relay information to the web interface.
-            </p>
-          </div>
-
-          <div className="architecture-diagram">
-            <div className="arch-node">
-              <Wind className="arch-icon" size={24} />
-              <div className="arch-node-title">1. Gas Sensors</div>
-              <div className="arch-node-desc">MQ-6 & MQ-135 sensors track gaseous densities.</div>
-            </div>
-
-            <div className="arch-arrow">➔</div>
-
-            <div className="arch-node">
-              <Layers className="arch-icon" size={24} />
-              <div className="arch-node-title">2. ESP32 Processing</div>
-              <div className="arch-node-desc">EMA filters digital signal, computes logarithmic PPM.</div>
-            </div>
-
-            <div className="arch-arrow">➔</div>
-
-            <div className="arch-node">
-              <Server className="arch-icon" size={24} />
-              <div className="arch-node-title">3. CORS API Server</div>
-              <div className="arch-node-desc">ESP32 serves JSON data on `/data` route.</div>
-            </div>
-
-            <div className="arch-arrow">➔</div>
-
-            <div className="arch-node">
-              <HardDrive className="arch-icon" size={24} />
-              <div className="arch-node-title">4. React Console</div>
-              <div className="arch-node-desc">Client fetches metrics and updates interactive SVG charts.</div>
-            </div>
-          </div>
-        </section>
-
-        {/* Specs Table Section */}
-        <section id="specs" className="landing-section">
-          <div className="section-header">
-            <span className="section-tag">Specifications</span>
-            <h2 className="section-title">Technical Specifications</h2>
-            <p className="section-desc">
-              Hardware tolerances and network configurations.
-            </p>
-          </div>
 
           <div className="specs-table-container">
             <table className="specs-table">
@@ -866,288 +942,275 @@ function App() {
           </div>
         </footer>
       </div>
-    );
-  }
+    ) : (
+      /* TELEMETRY CONSOLE VIEW */
+      <div className="app-container">
+        {/* Console Header */}
+        <header className="app-header">
+          <div className="header-title-section">
+            <button className="console-back-btn" onClick={() => setView('landing')}>
+              Back to Home
+            </button>
+            <div style={{ height: '24px', width: '1px', background: 'var(--card-border)' }}></div>
+            <Activity className="header-icon" size={24} />
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h1 style={{ fontSize: '20px', margin: 0 }}>HAZGUARD CONSOLE</h1>
+                {isDangerous && (
+                  <div className="simulation-active-badge" style={{ background: 'var(--color-danger-glow)', color: 'var(--color-danger)', borderColor: 'rgba(239,68,68,0.2)' }}>
+                    <span style={{ background: 'var(--color-danger)' }}></span>DANGER
+                  </div>
+                )}
+                {isSimulation && (
+                  <div className="simulation-active-badge">
+                    <span></span>Simulating
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
-  // TELEMETRY CONSOLE VIEW
-  return (
-    <div className="app-container animate-fade-in">
-      {/* Console Header */}
-      <header className="app-header">
-        <div className="header-title-section">
-          <button className="console-back-btn" onClick={() => setView('landing')}>
-            Back to Home
-          </button>
-          <div style={{ height: '24px', width: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
-          <Activity className="header-icon" size={24} />
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 style={{ fontSize: '20px', margin: 0 }}>HAZGUARD CONSOLE</h1>
-              {isSimulation && (
-                <div className="simulation-active-badge">
-                  <span></span>Simulating
+          {/* Connection status and settings */}
+          <div className="connection-panel">
+            {/* Dynamic theme switcher inside console header */}
+            <button 
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+            >
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
+
+            <div className={`status-badge ${isSimulation ? 'connected' : connectionStatus}`}>
+              <span className={`status-dot ${(!isSimulation && connectionStatus === 'reconnecting') ? 'pulsing' : ''}`}></span>
+              {isSimulation 
+                ? 'Demo Mode' 
+                : connectionStatus === 'connected' 
+                  ? 'ESP32 Online' 
+                  : connectionStatus === 'reconnecting' 
+                    ? 'Reconnecting' 
+                    : 'ESP32 Offline'}
+            </div>
+
+            <button 
+              className="ip-config-btn" 
+              onClick={() => setShowConfig(!showConfig)}
+              title="Configure connection settings"
+            >
+              <Settings size={18} />
+            </button>
+          </div>
+        </header>
+
+        {/* Config Settings Form dropdown */}
+        {showConfig && (
+          <form className="config-dropdown" onSubmit={handleSaveConfig}>
+            <h3>Connection Setup</h3>
+            
+            <div className="sim-mode-toggle-container">
+              <div className="sim-label-wrap">
+                <Play size={14} className="text-secondary" />
+                <label htmlFor="sim-toggle-checkbox" style={{ fontSize: '13px', fontWeight: '600' }}>Demo/Simulation Mode</label>
+              </div>
+              <label className="sim-toggle-switch">
+                <input 
+                  id="sim-toggle-checkbox"
+                  type="checkbox" 
+                  checked={isSimulation} 
+                  onChange={handleToggleSimulation} 
+                />
+                <span className="sim-toggle-slider"></span>
+              </label>
+            </div>
+
+            {!isSimulation && (
+              <>
+                <div className="input-group">
+                  <label htmlFor="ip-input">ESP32 IP / Hostname</label>
+                  <input 
+                    id="ip-input"
+                    type="text" 
+                    value={inputIp} 
+                    onChange={(e) => setInputIp(e.target.value)}
+                    placeholder="e.g. 192.168.1.15"
+                    className="ip-input"
+                    required 
+                  />
+                </div>
+
+                {connectionStatus === 'connected' && (
+                  <button 
+                    type="button" 
+                    className="btn-secondary btn-calibrate" 
+                    onClick={handleRemoteCalibration}
+                    disabled={isCalibrating}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    <RefreshCw size={14} className={isCalibrating ? 'animate-spin' : ''} />
+                    {isCalibrating ? 'Calibrating...' : 'Recalibrate Sensors (Clean Air)'}
+                  </button>
+                )}
+              </>
+            )}
+
+            <div className="input-group">
+              <label htmlFor="poll-input">Refresh Interval ({fetchInterval / 1000}s)</label>
+              <select 
+                id="poll-input"
+                value={fetchInterval} 
+                onChange={(e) => setFetchInterval(Number(e.target.value))}
+                className="ip-input"
+              >
+                <option value="500">Fast (500 ms)</option>
+                <option value="1000">Normal (1.0 sec)</option>
+                <option value="2000">Eco (2.0 sec)</option>
+                <option value="5000">Slow (5.0 sec)</option>
+              </select>
+            </div>
+
+            <button type="submit" className="save-btn">Connect & Save</button>
+          </form>
+        )}
+
+        {/* Safety Alert Banner */}
+        {gasData.isDangerous && (
+          <div className="danger-banner">
+            <Bell className="banner-icon" size={28} />
+            <div>
+              <h2>CRITICAL ALERT</h2>
+              <p>{gasData.status} The alarm buzzer is sounding. Please ventilate the area immediately and check safety hazards.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Metrics Grid with circular gauges */}
+        <section className="dashboard-grid">
+          {/* Methane Gas Card */}
+          <div className={`sensor-card ${methaneLevel}`}>
+            <div className="sensor-header">
+              <div className="sensor-info">
+                <span className="sensor-type">Combustible Gas</span>
+                <h2 className="sensor-name">Methane (CH₄)</h2>
+              </div>
+              <div className="sensor-icon-wrapper">
+                <Flame size={20} />
+              </div>
+            </div>
+            
+            {/* Custom Circular SVG Gauge */}
+            {renderCircularGauge(gasData.methane, 1000, methaneLevel)}
+
+            <div className="sensor-stats-grid">
+              <div className="stat-item">
+                <span className="stat-label">Session Max</span>
+                <span className="stat-value">{stats.methaneMax.toFixed(1)} ppm</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">Session Min</span>
+                <span className="stat-value">
+                  {stats.methaneMin === 9999 ? '0.0' : stats.methaneMin.toFixed(1)} ppm
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Ammonia Gas Card */}
+          <div className={`sensor-card ${ammoniaLevel}`}>
+            <div className="sensor-header">
+              <div className="sensor-info">
+                <span className="sensor-type">Toxic Gas / Air Quality</span>
+                <h2 className="sensor-name">Ammonia (NH₃)</h2>
+              </div>
+              <div className="sensor-icon-wrapper">
+                <Wind size={20} />
+              </div>
+            </div>
+
+            {/* Custom Circular SVG Gauge */}
+            {renderCircularGauge(gasData.ammonia, 300, ammoniaLevel)}
+
+            <div className="sensor-stats-grid">
+              <div className="stat-item">
+                <span className="stat-label">Session Max</span>
+                <span className="stat-value">{stats.ammoniaMax.toFixed(1)} ppm</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">Session Min</span>
+                <span className="stat-value">
+                  {stats.ammoniaMin === 9999 ? '0.0' : stats.ammoniaMin.toFixed(1)} ppm
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SVG Historical Chart Panel */}
+        <section className="chart-panel">
+          <div className="chart-header">
+            <h2 className="chart-title">Real-Time Level Trends</h2>
+            <div className="chart-legend">
+              <div className="legend-item">
+                <span className="legend-color methane"></span>
+                <span>Methane (0-2000 ppm)</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-color ammonia"></span>
+                <span>Ammonia (0-600 ppm)</span>
+              </div>
+              {history.length > 0 && (
+                <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
+                  <button 
+                    onClick={handleExportCSV}
+                    className="btn-secondary"
+                    title="Export telemetry history to CSV file"
+                  >
+                    <Download size={12} />
+                    Export CSV
+                  </button>
+                  <button 
+                    onClick={handleResetStats}
+                    className="clear-log-btn" 
+                  >
+                    Reset Stats
+                  </button>
                 </div>
               )}
             </div>
           </div>
-        </div>
 
-        {/* Connection status and settings */}
-        <div className="connection-panel">
-          <div className={`status-badge ${isSimulation ? 'connected' : connectionStatus}`}>
-            <span className={`status-dot ${(!isSimulation && connectionStatus === 'reconnecting') ? 'pulsing' : ''}`}></span>
-            {isSimulation 
-              ? 'Demo Mode' 
-              : connectionStatus === 'connected' 
-                ? 'ESP32 Online' 
-                : connectionStatus === 'reconnecting' 
-                  ? 'Reconnecting' 
-                  : 'ESP32 Offline'}
+          <div className="svg-chart-container">
+            {renderSvgChart()}
+          </div>
+        </section>
+
+        {/* Event Logs Panel */}
+        <section className="log-panel">
+          <div className="log-header">
+            <h2 className="log-title">Telemetry & Alert History</h2>
+            <button className="clear-log-btn" onClick={handleClearLogs}>
+              <Trash2 size={12} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} />
+              Clear
+            </button>
           </div>
 
-          <button 
-            className="ip-config-btn" 
-            onClick={() => setShowConfig(!showConfig)}
-            title="Configure connection settings"
-          >
-            <Settings size={18} />
-          </button>
-        </div>
-      </header>
-
-      {/* Config Settings Form dropdown */}
-      {showConfig && (
-        <form className="config-dropdown" onSubmit={handleSaveConfig}>
-          <h3>Connection Setup</h3>
-          
-          <div className="sim-mode-toggle-container">
-            <div className="sim-label-wrap">
-              <Play size={14} className="text-secondary" />
-              <label htmlFor="sim-toggle-checkbox" style={{ fontSize: '13px', fontWeight: '600' }}>Demo/Simulation Mode</label>
-            </div>
-            <label className="sim-toggle-switch">
-              <input 
-                id="sim-toggle-checkbox"
-                type="checkbox" 
-                checked={isSimulation} 
-                onChange={handleToggleSimulation} 
-              />
-              <span className="sim-toggle-slider"></span>
-            </label>
+          <div className="log-list">
+            {eventLogs.map((log) => {
+              const LogIcon = log.type === 'danger' ? AlertTriangle 
+                            : log.type === 'warning' ? AlertTriangle 
+                            : log.type === 'success' ? CheckCircle2 
+                            : Info;
+              return (
+                <div key={log.id} className={`log-item ${log.type}`}>
+                  <LogIcon size={14} className="log-icon" />
+                  <span className="log-time">[{log.time}]</span>
+                  <span className="log-message">{log.message}</span>
+                </div>
+              );
+            })}
           </div>
-
-          {!isSimulation && (
-            <>
-              <div className="input-group">
-                <label htmlFor="ip-input">ESP32 IP / Hostname</label>
-                <input 
-                  id="ip-input"
-                  type="text" 
-                  value={inputIp} 
-                  onChange={(e) => setInputIp(e.target.value)}
-                  placeholder="e.g. 192.168.1.15"
-                  className="ip-input"
-                  required 
-                />
-              </div>
-
-              {connectionStatus === 'connected' && (
-                <button 
-                  type="button" 
-                  className="btn-secondary btn-calibrate" 
-                  onClick={handleRemoteCalibration}
-                  disabled={isCalibrating}
-                  style={{ width: '100%', justifyContent: 'center' }}
-                >
-                  <RefreshCw size={14} className={isCalibrating ? 'animate-spin' : ''} />
-                  {isCalibrating ? 'Calibrating...' : 'Recalibrate Sensors (Clean Air)'}
-                </button>
-              )}
-            </>
-          )}
-
-          <div className="input-group">
-            <label htmlFor="poll-input">Refresh Interval ({fetchInterval / 1000}s)</label>
-            <select 
-              id="poll-input"
-              value={fetchInterval} 
-              onChange={(e) => setFetchInterval(Number(e.target.value))}
-              className="ip-input"
-            >
-              <option value="500">Fast (500 ms)</option>
-              <option value="1000">Normal (1.0 sec)</option>
-              <option value="2000">Eco (2.0 sec)</option>
-              <option value="5000">Slow (5.0 sec)</option>
-            </select>
-          </div>
-
-          <button type="submit" className="save-btn">Connect & Save</button>
-        </form>
-      )}
-
-      {/* Safety Alert Banner */}
-      {gasData.isDangerous && (
-        <div className="danger-banner">
-          <Bell className="banner-icon" size={28} />
-          <div>
-            <h2>CRITICAL ALERT</h2>
-            <p>{gasData.status} The alarm buzzer is sounding. Please ventilate the area immediately and check safety hazards.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Metrics Grid */}
-      <section className="dashboard-grid">
-        {/* Methane Gas Card */}
-        <div className={`sensor-card ${methaneLevel}`}>
-          <div className="sensor-header">
-            <div className="sensor-info">
-              <span className="sensor-type">Combustible Gas</span>
-              <h2 className="sensor-name">Methane (CH₄)</h2>
-            </div>
-            <div className="sensor-icon-wrapper">
-              <Flame size={20} />
-            </div>
-          </div>
-          
-          <div className="sensor-value-display">
-            <span className="sensor-value">{gasData.methane.toFixed(1)}</span>
-            <span className="sensor-unit">ppm</span>
-          </div>
-
-          <div className="gauge-container">
-            <div 
-              className="gauge-bar" 
-              style={{ width: `${Math.min((gasData.methane / 1000) * 100, 100)}%` }}
-            ></div>
-          </div>
-          <div className="gauge-labels">
-            <span>0 ppm</span>
-            <span>Limit: 1000 ppm</span>
-          </div>
-
-          <div className="sensor-stats-grid">
-            <div className="stat-item">
-              <span className="stat-label">Session Max</span>
-              <span className="stat-value">{stats.methaneMax.toFixed(1)} ppm</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Session Min</span>
-              <span className="stat-value">
-                {stats.methaneMin === 9999 ? '0.0' : stats.methaneMin.toFixed(1)} ppm
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Ammonia Gas Card */}
-        <div className={`sensor-card ${ammoniaLevel}`}>
-          <div className="sensor-header">
-            <div className="sensor-info">
-              <span className="sensor-type">Toxic Gas / Air Quality</span>
-              <h2 className="sensor-name">Ammonia (NH₃)</h2>
-            </div>
-            <div className="sensor-icon-wrapper">
-              <Wind size={20} />
-            </div>
-          </div>
-
-          <div className="sensor-value-display">
-            <span className="sensor-value">{gasData.ammonia.toFixed(1)}</span>
-            <span className="sensor-unit">ppm</span>
-          </div>
-
-          <div className="gauge-container">
-            <div 
-              className="gauge-bar" 
-              style={{ width: `${Math.min((gasData.ammonia / 300) * 100, 100)}%` }}
-            ></div>
-          </div>
-          <div className="gauge-labels">
-            <span>0 ppm</span>
-            <span>Limit: 300 ppm</span>
-          </div>
-
-          <div className="sensor-stats-grid">
-            <div className="stat-item">
-              <span className="stat-label">Session Max</span>
-              <span className="stat-value">{stats.ammoniaMax.toFixed(1)} ppm</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Session Min</span>
-              <span className="stat-value">
-                {stats.ammoniaMin === 9999 ? '0.0' : stats.ammoniaMin.toFixed(1)} ppm
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SVG Historical Chart Panel */}
-      <section className="chart-panel">
-        <div className="chart-header">
-          <h2 className="chart-title">Real-Time Level Trends</h2>
-          <div className="chart-legend">
-            <div className="legend-item">
-              <span className="legend-color methane"></span>
-              <span>Methane (0-2000 ppm)</span>
-            </div>
-            <div className="legend-item">
-              <span className="legend-color ammonia"></span>
-              <span>Ammonia (0-600 ppm)</span>
-            </div>
-            {history.length > 0 && (
-              <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
-                <button 
-                  onClick={handleExportCSV}
-                  className="btn-secondary"
-                  title="Export telemetry history to CSV file"
-                >
-                  <Download size={12} />
-                  Export CSV
-                </button>
-                <button 
-                  onClick={handleResetStats}
-                  className="clear-log-btn" 
-                >
-                  Reset Stats
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="svg-chart-container">
-          {renderSvgChart()}
-        </div>
-      </section>
-
-      {/* Event Logs Panel */}
-      <section className="log-panel">
-        <div className="log-header">
-          <h2 className="log-title">Telemetry & Alert History</h2>
-          <button className="clear-log-btn" onClick={handleClearLogs}>
-            <Trash2 size={12} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} />
-            Clear
-          </button>
-        </div>
-
-        <div className="log-list">
-          {eventLogs.map((log) => {
-            const LogIcon = log.type === 'danger' ? AlertTriangle 
-                          : log.type === 'warning' ? AlertTriangle 
-                          : log.type === 'success' ? CheckCircle2 
-                          : Info;
-            return (
-              <div key={log.id} className={`log-item ${log.type}`}>
-                <LogIcon size={14} className="log-icon" />
-                <span className="log-time">[{log.time}]</span>
-                <span className="log-message">{log.message}</span>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+        </section>
+      </div>
+    )}
     </div>
   );
 }
