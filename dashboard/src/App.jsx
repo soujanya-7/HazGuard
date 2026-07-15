@@ -32,6 +32,11 @@ function App() {
     return localStorage.getItem('theme') || 'light';
   });
 
+  // Apply theme class to document.body for variable inheritance
+  useEffect(() => {
+    document.body.className = `theme-${theme}`;
+  }, [theme]);
+
   // Config States
   const [ipAddress, setIpAddress] = useState(() => {
     return localStorage.getItem('esp32_ip') || '192.168.1.100';
