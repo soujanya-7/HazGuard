@@ -98,40 +98,6 @@ body {
   background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%;
 }
 
-/* ==========================================================================
-   Cybernetic HUD CRT Filters
-   ========================================================================== */
-
-.crt-scanlines {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.06) 50%);
-  background-size: 100% 4px;
-  z-index: 9999;
-  pointer-events: none;
-  opacity: 0.85;
-}
-
-.theme-light .crt-scanlines {
-  background: linear-gradient(rgba(255, 255, 255, 0) 50%, rgba(15, 23, 42, 0.01) 50%);
-  background-size: 100% 4px;
-}
-
-.crt-scanner-beam {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 6px;
-  background: rgba(6, 182, 212, 0.05);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.1);
-  z-index: 9998;
-  pointer-events: none;
-  animation: scan-beam 8s linear infinite;
-}
-
-@keyframes scan-beam {
-  0% { top: -6px; }
-  100% { top: 100%; }
-}
-
 /* App Layout */
 .app-container {
   max-width: 1200px;
@@ -360,7 +326,7 @@ body {
 }
 
 /* ==========================================================================
-   Bento Grid Layout System
+   Bento Grid Layout System (Highly Unique Dashboard Structure)
    ========================================================================== */
 
 .bento-grid {
@@ -464,17 +430,6 @@ body {
   stroke-width: 9;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.3s;
-}
-
-.gauge-ticks {
-  fill: none;
-  stroke: rgba(15, 23, 42, 0.12);
-  stroke-width: 4;
-  stroke-dasharray: 2 10;
-}
-
-.theme-dark .gauge-ticks {
-  stroke: rgba(255, 255, 255, 0.12);
 }
 
 .gauge-center-content {
@@ -659,19 +614,8 @@ body {
   stroke: rgba(255, 255, 255, 0.15);
 }
 
-/* CRT Cyberpunk Terminal Console */
-.terminal-console {
-  background: #04060f !important;
-  border: 1px solid rgba(16, 185, 129, 0.18) !important;
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.05);
-}
-
-.theme-light .terminal-console {
-  background: #090c15 !important;
-  border-color: rgba(16, 185, 129, 0.25) !important;
-}
-
-.terminal-text-area {
+/* Event Logs list */
+.log-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -680,102 +624,77 @@ body {
   padding-right: 4px;
 }
 
-.terminal-text-area::-webkit-scrollbar {
+.log-list::-webkit-scrollbar {
   width: 4px;
 }
 
-.terminal-text-area::-webkit-scrollbar-thumb {
-  background: rgba(16, 185, 129, 0.2);
+.log-list::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.1);
   border-radius: 2px;
 }
 
-.terminal-line {
-  font-family: 'Courier New', Courier, monospace;
+.log-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.01);
+  border: 1px solid rgba(15, 23, 42, 0.02);
   font-size: 13px;
-  color: #10b981;
-  text-shadow: 0 0 4px rgba(16, 185, 129, 0.3);
-  display: flex;
-  gap: 8px;
-  line-height: 1.4;
+  animation: fade-in 0.3s ease-out;
 }
 
-.terminal-line.danger {
-  color: #ef4444;
-  text-shadow: 0 0 4px rgba(239, 68, 68, 0.3);
-}
-
-.terminal-line.warning {
-  color: #f59e0b;
-  text-shadow: 0 0 4px rgba(245, 158, 11, 0.3);
-}
-
-.terminal-line.success {
-  color: #10b981;
-}
-
-.terminal-line.info {
-  color: #3b82f6;
-  text-shadow: 0 0 4px rgba(59, 130, 246, 0.3);
-}
-
-.terminal-time {
-  color: rgba(16, 185, 129, 0.5);
-  font-weight: bold;
-}
-
-.terminal-line.danger .terminal-time {
-  color: rgba(239, 68, 68, 0.5);
-}
-
-.terminal-line.warning .terminal-time {
-  color: rgba(245, 158, 11, 0.5);
-}
-
-.terminal-cursor {
-  border-right: 7px solid #10b981;
-  animation: blink-prompt 1s step-end infinite;
-  display: inline-block;
-  width: 1px;
-  height: 14px;
-  margin-left: 2px;
-}
-
-@keyframes blink-prompt {
-  from, to { border-color: transparent }
-  50% { border-color: currentColor; }
-}
-
-/* HTML5 Canvas Molecular Visualizer Styles */
-.molecule-canvas-container {
-  position: relative;
-  width: 100%;
-  height: 135px;
-  background: rgba(15, 23, 42, 0.02);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.theme-dark .molecule-canvas-container {
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.molecule-canvas {
-  display: block;
-}
-
-.molecule-label {
-  position: absolute;
-  bottom: 8px;
-  left: 12px;
-  font-size: 10px;
-  font-weight: 700;
+.log-time {
+  font-family: monospace;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.log-message {
+  flex-grow: 1;
+  color: var(--text-secondary);
+}
+
+.log-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.log-item.danger {
+  background-color: rgba(220, 38, 38, 0.04);
+  border-color: rgba(220, 38, 38, 0.08);
+}
+
+.log-item.danger .log-icon {
+  color: var(--color-danger);
+}
+
+.log-item.warning {
+  background-color: rgba(217, 119, 6, 0.04);
+  border-color: rgba(217, 119, 6, 0.08);
+}
+
+.log-item.warning .log-icon {
+  color: var(--color-warning);
+}
+
+.log-item.info {
+  background-color: rgba(37, 99, 235, 0.04);
+  border-color: rgba(37, 99, 235, 0.08);
+}
+
+.log-item.info .log-icon {
+  color: var(--color-info);
+}
+
+.log-item.success {
+  background-color: rgba(5, 150, 105, 0.04);
+  border-color: rgba(5, 150, 105, 0.08);
+}
+
+.log-item.success .log-icon {
+  color: var(--color-safe);
 }
 
 /* Interactive Chart Tooltip */
@@ -817,7 +736,7 @@ body {
   cursor: crosshair;
 }
 
-/* Buttons */
+/* Remote Calibrate and CSV Buttons */
 .btn-secondary {
   background: var(--social-bg);
   border: 1px solid var(--card-border);
@@ -1100,7 +1019,7 @@ input:checked + .sim-toggle-slider:before {
 }
 
 /* ==========================================================================
-   Landing Page
+   Landing Page (Split-Hero Grid redone)
    ========================================================================== */
 
 .landing-container {
