@@ -27,6 +27,129 @@ import {
   Cpu
 } from 'lucide-react';
 
+// Custom 3D vector rotation HTML5 Canvas engine for molecular models
+function GasMoleculeCanvas({ gasType, ppmValue, maxPpm }) {
+  const canvasRef = useRef(null);
+  const animationFrameId = useRef(null);
+  const angleX = useRef(Math.random() * Math.PI);
+  const angleY = useRef(Math.random() * Math.PI);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Setup high DPI scaling
+    canvas.width = 160 * dpr;
+    canvas.height = 110 * dpr;
+    canvas.style.width = '160px';
+    canvas.style.height = '110px';
+    ctx.scale(dpr, dpr);
+
+    // Vector coordinates for tetrahedral Methane (CH4) or trigonal pyramidal Ammonia (NH3)
+    const atoms = gasType === 'methane' ? [
+      { name: 'C', r: 11, color: '#06b6d4', pos: [0, 0, 0] }, // Cyan Carbon
+      { name: 'H', r: 5, color: '#f8fafc', pos: [0, 24, 0] }, // Hydrogens
+      { name: 'H', r: 5, color: '#f8fafc', pos: [22, -8, 0] },
+      { name: 'H', r: 5, color: '#f8fafc', pos: [-11, -8, 19] },
+      { name: 'H', r: 5, color: '#f8fafc', pos: [-11, -8, -19] }
+    ] : [
+      { name: 'N', r: 10, color: '#a855f7', pos: [0, 5, 0] }, // Purple Nitrogen
+      { name: 'H', r: 5, color: '#f8fafc', pos: [22, -9, 0] }, // Hydrogens
+      { name: 'H', r: 5, color: '#f8fafc', pos: [-11, -9, 19] },
+      { name: 'H', r: 5, color: '#f8fafc', pos: [-11, -9, -19] }
+    ];
+
+    const render = () => {
+      ctx.clearRect(0, 0, 160, 110);
+      
+      // Speed and atomic vibration linked directly to gas density/PPM value
+      const speed = 0.012 + (ppmValue / maxPpm) * 0.05;
+      angleX.current += speed;
+      angleY.current += speed * 0.8;
+
+      const cosX = Math.cos(angleX.current);
+      const sinX = Math.sin(angleX.current);
+      const cosY = Math.cos(angleY.current);
+      const sinY = Math.sin(angleY.current);
+
+      // Atomic jitter to simulate high temperature/vibration of leaks
+      const jitterFactor = Math.min(ppmValue / maxPpm, 1) * 3.5;
+
+      const projected = atoms.map((atom) => {
+        let [x, y, z] = atom.pos;
+        if (atom.name === 'H') {
+          x += (Math.random() - 0.5) * jitterFactor;
+          y += (Math.random() - 0.5) * jitterFactor;
+          z += (Math.random() - 0.5) * jitterFactor;
+        }
+
+        // Rotate Y
+        let x1 = x * cosY - z * sinY;
+        let z1 = x * sinY + z * cosY;
+        // Rotate X
+        let y2 = y * cosX - z1 * sinX;
+        let z2 = y * sinX + z1 * cosX;
+
+        // Orthographic projection math
+        const scale = 70 / (70 + z2); 
+        return {
+          name: atom.name,
+          r: atom.r * scale,
+          x: 80 + x1 * scale * 1.3,
+          y: 52 + y2 * scale * 1.3,
+          z: z2,
+          color: atom.color
+        };
+      });
+
+      // Draw Bonds (lines connecting nodes)
+      const isDangerous = ppmValue > maxPpm * 0.5;
+      ctx.lineWidth = 2.0;
+      ctx.strokeStyle = isDangerous ? 'rgba(239, 68, 68, 0.65)' : 'rgba(148, 163, 184, 0.35)';
+      
+      for (let i = 1; i < projected.length; i++) {
+        ctx.beginPath();
+        ctx.moveTo(projected[0].x, projected[0].y);
+        ctx.lineTo(projected[i].x, projected[i].y);
+        ctx.stroke();
+      }
+
+      // Draw atoms ordered by Z depth (painter's algorithm)
+      const sorted = [...projected].sort((a, b) => b.z - a.z);
+      sorted.forEach((atom) => {
+        ctx.beginPath();
+        const grad = ctx.createRadialGradient(
+          atom.x - atom.r/3, atom.y - atom.r/3, atom.r/10,
+          atom.x, atom.y, atom.r
+        );
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.3, atom.color);
+        grad.addColorStop(1, '#020617');
+        ctx.fillStyle = grad;
+        ctx.arc(atom.x, atom.y, atom.r, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+
+      animationFrameId.current = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId.current);
+    };
+  }, [gasType, ppmValue, maxPpm]);
+
+  return (
+    <div className="molecule-canvas-container">
+      <canvas ref={canvasRef} className="molecule-canvas" />
+      <span className="molecule-label">{gasType === 'methane' ? 'Methane (CH4) 3D Model' : 'Ammonia (NH3) 3D Model'}</span>
+    </div>
+  );
+}
+
 function App() {
   // Navigation Router State
   const [view, setView] = useState('landing'); // 'landing' | 'dashboard'
@@ -49,6 +172,9 @@ function App() {
   // Leak Simulator State (0 - 100)
   const [leakLevel, setLeakLevel] = useState(0);
 
+  // Audio warning siren state (speaker mute/unmute control)
+  const [isMuted, setIsMuted] = useState(true);
+
   // Connection & Data States
   const [connectionStatus, setConnectionStatus] = useState('disconnected'); 
   const [gasData, setGasData] = useState({
@@ -64,7 +190,7 @@ function App() {
     {
       id: 'init',
       time: new Date().toLocaleTimeString(),
-      message: 'System started. Configure ESP32 IP or enable Simulation Mode to begin monitoring.',
+      message: 'HazGuard System initiated. Configure connection to ESP32 telemetry node.',
       type: 'info'
     }
   ]);
@@ -81,6 +207,9 @@ function App() {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const svgRef = useRef(null);
+
+  // Audio Context reference for Web Audio API alerts
+  const audioCtxRef = useRef(null);
 
   // Track previous states to detect transitions
   const prevDangerousRef = useRef(false);
@@ -124,7 +253,7 @@ function App() {
     
     if (enabled) {
       setConnectionStatus('connected');
-      setLeakLevel(15); // Start with moderate baseline
+      setLeakLevel(15); 
       addLog('Simulation Mode activated. Drag the leak slider below to test alerts.', 'success');
     } else {
       setConnectionStatus('disconnected');
@@ -222,6 +351,56 @@ function App() {
     });
     addLog('Session min/max statistics reset.', 'info');
   };
+
+  // Web Audio API siren alert synthesizer trigger
+  useEffect(() => {
+    if (isMuted || !gasData.isDangerous || view !== 'dashboard') return;
+
+    let active = true;
+    let osc = null;
+    let gain = null;
+
+    const playSirenBeep = () => {
+      if (!active) return;
+      try {
+        const ctx = audioCtxRef.current || new (window.AudioContext || window.webkitAudioContext)();
+        audioCtxRef.current = ctx;
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
+
+        osc = ctx.createOscillator();
+        gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.type = 'sawtooth';
+        // Alternating siren synthesizer sweep
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(660, ctx.currentTime + 0.18);
+
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.28);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.32);
+      } catch (err) {
+        console.error("Synthesizer error:", err);
+      }
+    };
+
+    // Pulse beep loop
+    playSirenBeep();
+    const alertTimer = setInterval(playSirenBeep, 600);
+
+    return () => {
+      active = false;
+      clearInterval(alertTimer);
+      if (osc) {
+        try { osc.stop(); } catch(e){}
+      }
+    };
+  }, [isMuted, gasData.isDangerous, view]);
 
   // Leak level simulator logic
   useEffect(() => {
@@ -437,7 +616,7 @@ function App() {
     setHoveredIndex(null);
   };
 
-  // Circular SVG Gauge Renderer
+  // Circular SVG Speedometer Gauge Renderer
   const renderCircularGauge = (value, maxValue, alertLevel) => {
     const radius = 50;
     const circumference = 2 * Math.PI * radius; // ~314.16
@@ -456,6 +635,13 @@ function App() {
             cy="70" 
             r={radius} 
             className="gauge-track"
+          />
+          {/* Radial analog speedometer ticks overlay */}
+          <circle 
+            cx="70" 
+            cy="70" 
+            r="44" 
+            className="gauge-ticks"
           />
           <circle 
             cx="70" 
@@ -652,7 +838,7 @@ function App() {
             />
 
             <circle cx={hoveredX} cy={hoveredMethaneY} r="6" fill="var(--accent-cyan)" className="chart-tooltip-dot" />
-            <circle cx={hoveredX} cy={hoveredAmmoniaY} r="6" fill="var(--accent-purple)" className="chart-tooltip-dot" />
+            <circle cx={hoveredX} cy={hoveredMmoniaY || hoveredAmmoniaY} r="6" fill="var(--accent-purple)" className="chart-tooltip-dot" />
 
             <g className="chart-tooltip-group" transform={`translate(${tooltipPos.x}, ${tooltipPos.y})`}>
               <rect width="150" height="75" className="chart-tooltip-bg" />
@@ -840,6 +1026,10 @@ function App() {
 
   return (
     <div className={`app-wrapper theme-${theme}`}>
+      {/* HUD CRT Screen scanlines */}
+      <div className="crt-scanlines"></div>
+      <div className="crt-scanner-beam"></div>
+
       {/* LANDING PAGE VIEW */}
       {view === 'landing' ? (
         <div className="landing-container">
@@ -1095,7 +1285,7 @@ function App() {
             <Activity className="header-icon" size={24} />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h1 style={{ fontSize: '20px', margin: 0 }}>HAZGUARD HUB</h1>
+                <h1 style={{ fontSize: '20px', margin: 0 }}>HAZGUARD CYBER-HUB</h1>
                 {gasData.isDangerous && (
                   <div className="simulation-active-badge" style={{ background: 'var(--color-danger-glow)', color: 'var(--color-danger)', borderColor: 'rgba(239,68,68,0.2)' }}>
                     <span style={{ background: 'var(--color-danger)' }}></span>DANGER
@@ -1119,6 +1309,23 @@ function App() {
               title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
             >
               {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
+
+            {/* Audio warning siren toggle speaker */}
+            <button 
+              className="ip-config-btn"
+              onClick={() => setIsMuted(!isMuted)}
+              title={isMuted ? 'Unmute Browser Siren' : 'Mute Browser Siren'}
+            >
+              {isMuted ? (
+                <VolumeX size={18} />
+              ) : (
+                <Volume2 
+                  size={18} 
+                  className={gasData.isDangerous ? 'text-danger' : 'text-secondary'}
+                  style={{ animation: gasData.isDangerous ? 'blink 0.5s infinite alternate' : 'none' }}
+                />
+              )}
             </button>
 
             <div className={`status-badge ${isSimulation ? 'connected' : connectionStatus}`}>
@@ -1239,7 +1446,7 @@ function App() {
             </div>
 
             <div className="telemetry-split">
-              {/* Methane Subcard */}
+              {/* Methane Subcard with 3D Molecule */}
               <div className={`sensor-subcard ${methaneLevel}`}>
                 <div className="sensor-header">
                   <div className="sensor-info">
@@ -1251,6 +1458,9 @@ function App() {
                   </div>
                 </div>
                 
+                {/* 3D Molecule Projection Canvas */}
+                <GasMoleculeCanvas gasType="methane" ppmValue={gasData.methane} maxPpm={1000} />
+
                 {renderCircularGauge(gasData.methane, 1000, methaneLevel)}
 
                 <div className="sensor-stats-grid">
@@ -1267,7 +1477,7 @@ function App() {
                 </div>
               </div>
 
-              {/* Ammonia Subcard */}
+              {/* Ammonia Subcard with 3D Molecule */}
               <div className={`sensor-subcard ${ammoniaLevel}`}>
                 <div className="sensor-header">
                   <div className="sensor-info">
@@ -1278,6 +1488,9 @@ function App() {
                     <Wind size={18} />
                   </div>
                 </div>
+
+                {/* 3D Molecule Projection Canvas */}
+                <GasMoleculeCanvas gasType="ammonia" ppmValue={gasData.ammonia} maxPpm={300} />
 
                 {renderCircularGauge(gasData.ammonia, 300, ammoniaLevel)}
 
@@ -1347,33 +1560,34 @@ function App() {
             </div>
           </div>
 
-          {/* Card 4: Historical Logs list (Span 2) */}
-          <div className="bento-card bento-card-logs">
-            <div className="log-header" style={{ borderBottom: '1px solid var(--card-border)', paddingBottom: '12px' }}>
+          {/* Card 4: Historical Logs Terminal Console (Span 2) */}
+          <div className="bento-card bento-card-logs terminal-console">
+            <div className="log-header" style={{ borderBottom: '1px solid rgba(16, 185, 129, 0.2)', paddingBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Activity size={18} className="text-secondary" />
-                <h2 style={{ fontSize: '16px', fontWeight: '800' }}>Telemetry & Warning History</h2>
+                <Activity size={18} style={{ color: '#10b981' }} />
+                <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#10b981', fontFamily: 'monospace' }}>hazguard-terminal.sh</h2>
               </div>
-              <button className="clear-log-btn" onClick={handleClearLogs}>
+              <button 
+                className="clear-log-btn" 
+                onClick={handleClearLogs}
+                style={{ borderColor: 'rgba(16, 185, 129, 0.3)', color: '#10b981', background: 'transparent' }}
+              >
                 <Trash2 size={11} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} />
-                Clear Logs
+                Reset Shell
               </button>
             </div>
 
-            <div className="log-list">
-              {eventLogs.map((log) => {
-                const LogIcon = log.type === 'danger' ? AlertTriangle 
-                              : log.type === 'warning' ? AlertTriangle 
-                              : log.type === 'success' ? CheckCircle2 
-                              : Info;
-                return (
-                  <div key={log.id} className={`log-item ${log.type}`}>
-                    <LogIcon size={14} className="log-icon" />
-                    <span className="log-time">[{log.time}]</span>
-                    <span className="log-message">{log.message}</span>
-                  </div>
-                );
-              })}
+            <div className="terminal-text-area">
+              {eventLogs.map((log) => (
+                <div key={log.id} className={`terminal-line ${log.type}`}>
+                  <span className="terminal-time">[{log.time}]</span>
+                  <span>&gt; {log.message}</span>
+                </div>
+              ))}
+              <div className="terminal-line">
+                <span className="terminal-time">[{new Date().toLocaleTimeString()}]</span>
+                <span>&gt; monitoring stream --active<span className="terminal-cursor"></span></span>
+              </div>
             </div>
           </div>
 
