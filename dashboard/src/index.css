@@ -15,7 +15,7 @@
   /* Crisp Light Mode Design Tokens */
   --bg-primary: #f1f5f9;
   --bg-secondary: #ffffff;
-  --card-bg: rgba(255, 255, 255, 0.75);
+  --card-bg: rgba(255, 255, 255, 0.85);
   --card-border: rgba(15, 23, 42, 0.07);
   
   --text-primary: #0f172a;
@@ -60,7 +60,7 @@
 }
 
 /* Smooth transitions for theme switching */
-body, .app-header, .sensor-card, .chart-panel, .log-panel, .landing-header, .landing-footer, .arch-node, .specs-table-container, .btn-secondary, .ip-config-btn, h1, h2, h3, p, td, th, .gauge-track, .sim-mode-toggle-container {
+body, .app-header, .sensor-card, .chart-panel, .log-panel, .landing-header, .landing-footer, .arch-node, .specs-table-container, .btn-secondary, .ip-config-btn, h1, h2, h3, p, td, th, .gauge-track, .sim-mode-toggle-container, .bento-card {
   transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease;
 }
 
@@ -79,19 +79,23 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Seamless background gradients matched to theme */
+/* Glowing Engineering HUD mesh backdrop */
 .app-wrapper {
   background-image: 
+    linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px),
     radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.03) 0px, transparent 50%),
-    radial-gradient(at 50% 0%, rgba(6, 182, 212, 0.03) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(220, 38, 38, 0.01) 0px, transparent 50%);
+  background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%;
 }
 
 .theme-dark.app-wrapper {
   background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px),
     radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.05) 0px, transparent 50%),
-    radial-gradient(at 50% 0%, rgba(6, 182, 212, 0.05) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(239, 68, 68, 0.03) 0px, transparent 50%);
+  background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%;
 }
 
 /* App Layout */
@@ -194,7 +198,7 @@ body {
   animation: blink 1s infinite alternate;
 }
 
-/* Config Modal/Dropdown */
+/* Config Buttons */
 .ip-config-btn, .theme-toggle-btn {
   display: flex;
   align-items: center;
@@ -321,127 +325,79 @@ body {
   color: var(--text-secondary);
 }
 
-/* Dashboard Grid */
-.dashboard-grid {
+/* ==========================================================================
+   Bento Grid Layout System (Highly Unique Dashboard Structure)
+   ========================================================================== */
+
+.bento-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(3, 1fr);
+  grid-gap: 24px;
 }
 
-/* Glassmorphic Cards */
-.sensor-card {
+.bento-card {
   background: var(--card-bg);
   backdrop-filter: var(--glass-blur);
   border: 1px solid var(--card-border);
   border-radius: 20px;
   padding: 24px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  position: relative;
+}
+
+.bento-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.theme-dark .bento-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Grid Area Allocations */
+.bento-card-telemetry {
+  grid-column: span 2;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  box-shadow: var(--shadow-lg);
-  position: relative;
-  overflow: hidden;
 }
 
-.sensor-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 4px;
-  background: transparent;
-}
-
-.sensor-card.warning::before {
-  background: linear-gradient(90deg, var(--color-warning), transparent);
-}
-
-.sensor-card.danger::before {
-  background: linear-gradient(90deg, var(--color-danger), transparent);
-}
-
-.sensor-card.safe::before {
-  background: linear-gradient(90deg, var(--color-safe), transparent);
-}
-
-.sensor-card:hover {
-  transform: translateY(-4px);
-}
-
-.sensor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.sensor-info {
+.bento-card-visual {
+  grid-column: span 1;
+  grid-row: span 2;
   display: flex;
   flex-direction: column;
+  gap: 20px;
+  justify-content: space-between;
 }
 
-.sensor-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.sensor-type {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.sensor-icon-wrapper {
+.bento-card-chart {
+  grid-column: span 2;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--social-bg);
-  border: 1px solid var(--card-border);
+  flex-direction: column;
+  gap: 20px;
 }
 
-.sensor-card.safe .sensor-icon-wrapper {
-  color: var(--color-safe);
-  background: var(--color-safe-glow);
-  border-color: rgba(16, 185, 129, 0.15);
-}
-
-.sensor-card.warning .sensor-icon-wrapper {
-  color: var(--color-warning);
-  background: var(--color-warning-glow);
-  border-color: rgba(245, 158, 11, 0.15);
-  animation: pulse-slow 1.5s infinite;
-}
-
-.sensor-card.danger .sensor-icon-wrapper {
-  color: var(--color-danger);
-  background: var(--color-danger-glow);
-  border-color: rgba(239, 68, 68, 0.15);
-  animation: pulse-danger 1s infinite;
-}
-
-/* Value Display */
-.sensor-value-display {
+.bento-card-logs {
+  grid-column: span 2;
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.sensor-value {
-  font-size: 48px;
-  font-weight: 800;
-  letter-spacing: -1px;
-  font-feature-settings: "tnum";
+.bento-card-controls {
+  grid-column: span 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.sensor-unit {
-  font-size: 18px;
-  color: var(--text-secondary);
-  font-weight: 500;
+/* Dual telemetry split cards inside bento card */
+.telemetry-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-gap: 24px;
 }
 
 /* Circular SVG Gauge Styling */
@@ -500,6 +456,65 @@ body {
   margin-top: 4px;
 }
 
+/* Sensor card inside bento grid */
+.sensor-subcard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sensor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sensor-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.sensor-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sensor-type {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.sensor-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--social-bg);
+  border: 1px solid var(--card-border);
+}
+
+.warning .sensor-icon-wrapper {
+  color: var(--color-warning);
+  background: var(--color-warning-glow);
+  animation: pulse-slow 1.5s infinite;
+}
+
+.danger .sensor-icon-wrapper {
+  color: var(--color-danger);
+  background: var(--color-danger-glow);
+  animation: pulse-danger 1s infinite;
+}
+
+.safe .sensor-icon-wrapper {
+  color: var(--color-safe);
+  background: var(--color-safe-glow);
+}
+
 /* Stats Footer */
 .sensor-stats-grid {
   display: grid;
@@ -524,58 +539,6 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
-}
-
-/* Chart Container */
-.chart-panel {
-  background: var(--card-bg);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--card-border);
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.chart-title {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.chart-legend {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.legend-color {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.legend-color.methane {
-  background-color: var(--accent-cyan);
-}
-
-.legend-color.ammonia {
-  background-color: var(--accent-purple);
 }
 
 /* SVG Chart */
@@ -651,49 +614,7 @@ body {
   stroke: rgba(255, 255, 255, 0.15);
 }
 
-/* Event Logs */
-.log-panel {
-  background: var(--card-bg);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--card-border);
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.log-title {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.clear-log-btn {
-  background: transparent;
-  border: 1px solid var(--card-border);
-  color: var(--text-secondary);
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.clear-log-btn:hover {
-  background: rgba(15, 23, 42, 0.05);
-  color: var(--text-primary);
-}
-
-.theme-dark .clear-log-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
+/* Event Logs list */
 .log-list {
   display: flex;
   flex-direction: column;
@@ -776,62 +697,6 @@ body {
   color: var(--color-safe);
 }
 
-/* Animations */
-@keyframes pulse-slow {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.85;
-    transform: scale(0.98);
-  }
-}
-
-@keyframes pulse-danger {
-  0%, 100% {
-    box-shadow: 0 0 10px rgba(220, 38, 38, 0.08);
-    border-color: rgba(220, 38, 38, 0.25);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(220, 38, 38, 0.2);
-    border-color: rgba(220, 38, 38, 0.5);
-  }
-}
-
-@keyframes blink {
-  from { opacity: 0.4; }
-  to { opacity: 1; }
-}
-
-@keyframes shake {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-5deg); }
-  75% { transform: rotate(5deg); }
-}
-
-@keyframes slide-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* Interactive Chart Tooltip */
 .chart-tooltip-group {
   pointer-events: none;
@@ -869,16 +734,6 @@ body {
 .chart-interactive-overlay {
   fill: transparent;
   cursor: crosshair;
-}
-
-/* Spinner for Calibration loading state */
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 /* Remote Calibrate and CSV Buttons */
@@ -1014,7 +869,157 @@ input:checked + .sim-toggle-slider:before {
 }
 
 /* ==========================================================================
-   Landing Page Styles
+   Interactive P&ID industrial Schematic
+   ========================================================================== */
+
+.pid-visualizer-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.pid-schematic-wrapper {
+  background: var(--bg-secondary);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.pid-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.pid-pipe {
+  stroke: rgba(15, 23, 42, 0.08);
+  stroke-width: 22;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.theme-dark .pid-pipe {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.pid-flow-line {
+  stroke-width: 8;
+  stroke-linecap: round;
+  fill: none;
+  stroke-dasharray: 12 18;
+  animation: pid-flow-animation 1.5s linear infinite;
+  transition: stroke 0.4s ease, filter 0.4s ease;
+}
+
+@keyframes pid-flow-animation {
+  from { stroke-dashoffset: 60; }
+  to { stroke-dashoffset: 0; }
+}
+
+.pid-sensor-capsule {
+  fill: var(--bg-secondary);
+  stroke: var(--card-border);
+  stroke-width: 2;
+  transition: fill 0.3s, stroke 0.3s;
+}
+
+.pid-wire {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  animation: pid-pulse-wire 1s linear infinite;
+  transition: stroke 0.3s;
+}
+
+@keyframes pid-pulse-wire {
+  from { stroke-dashoffset: 16; }
+  to { stroke-dashoffset: 0; }
+}
+
+.pid-mcu-shape {
+  fill: var(--social-bg);
+  stroke: var(--card-border);
+  stroke-width: 2;
+  rx: 6;
+  ry: 6;
+}
+
+.pid-buzzer-bell {
+  transition: transform 0.2s ease, fill 0.2s;
+}
+
+.pid-node-text {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 10px;
+  fill: var(--text-secondary);
+}
+
+.leak-slider-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--social-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+}
+
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.slider-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.slider-val-readout {
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.leak-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.theme-dark .leak-slider {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.leak-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
+  transition: all 0.2s;
+}
+
+.leak-slider::-webkit-slider-thumb:hover {
+  background: var(--color-danger);
+  transform: scale(1.1);
+}
+
+/* ==========================================================================
+   Landing Page (Split-Hero Grid redone)
    ========================================================================== */
 
 .landing-container {
@@ -1489,6 +1494,15 @@ input:checked + .sim-toggle-slider:before {
   .hero-badge {
     margin-bottom: 5px;
   }
+  
+  .bento-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .bento-card-telemetry { grid-column: span 2; }
+  .bento-card-visual { grid-column: span 1; grid-row: span 1; }
+  .bento-card-chart { grid-column: span 2; }
+  .bento-card-logs { grid-column: span 2; }
+  .bento-card-controls { grid-column: span 1; }
 }
 
 @media (max-width: 768px) {
@@ -1518,6 +1532,17 @@ input:checked + .sim-toggle-slider:before {
     flex-direction: column;
     gap: 24px;
     text-align: center;
+  }
+  
+  .bento-grid {
+    grid-template-columns: 1fr;
+  }
+  .bento-card-telemetry, .bento-card-visual, .bento-card-chart, .bento-card-logs, .bento-card-controls {
+    grid-column: span 1;
+    grid-row: auto;
+  }
+  .telemetry-split {
+    grid-template-columns: 1fr;
   }
 }
 

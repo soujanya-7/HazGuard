@@ -20,7 +20,11 @@ import {
   HardDrive,
   Layers,
   Sun,
-  Moon
+  Moon,
+  Volume2,
+  VolumeX,
+  Database,
+  Cpu
 } from 'lucide-react';
 
 function App() {
@@ -32,11 +36,6 @@ function App() {
     return localStorage.getItem('theme') || 'light';
   });
 
-  // Apply theme class to document.body for variable inheritance
-  useEffect(() => {
-    document.body.className = `theme-${theme}`;
-  }, [theme]);
-
   // Config States
   const [ipAddress, setIpAddress] = useState(() => {
     return localStorage.getItem('esp32_ip') || '192.168.1.100';
@@ -46,6 +45,9 @@ function App() {
   const [fetchInterval, setFetchInterval] = useState(1000); // ms
   const [isSimulation, setIsSimulation] = useState(false);
   const [isCalibrating, setIsCalibrating] = useState(false);
+
+  // Leak Simulator State (0 - 100)
+  const [leakLevel, setLeakLevel] = useState(0);
 
   // Connection & Data States
   const [connectionStatus, setConnectionStatus] = useState('disconnected'); 
@@ -83,7 +85,11 @@ function App() {
   // Track previous states to detect transitions
   const prevDangerousRef = useRef(false);
   const consecutiveFailures = useRef(0);
-  const simRandomWalkRef = useRef({ methane: 150.0, ammonia: 45.0 });
+
+  // Apply theme class to document.body for variable inheritance
+  useEffect(() => {
+    document.body.className = `theme-${theme}`;
+  }, [theme]);
 
   // Helper to add log messages
   const addLog = (message, type = 'info') => {
@@ -118,9 +124,11 @@ function App() {
     
     if (enabled) {
       setConnectionStatus('connected');
-      addLog('Simulation Mode activated. Feeding mock telemetry data.', 'success');
+      setLeakLevel(15); // Start with moderate baseline
+      addLog('Simulation Mode activated. Drag the leak slider below to test alerts.', 'success');
     } else {
       setConnectionStatus('disconnected');
+      setLeakLevel(0);
       setGasData({ methane: 0, ammonia: 0, isDangerous: false, status: 'Disconnected' });
       addLog('Simulation Mode deactivated. Connecting to hardware node...', 'info');
     }
@@ -215,73 +223,66 @@ function App() {
     addLog('Session min/max statistics reset.', 'info');
   };
 
-  // Simulation Mode loop (Only active when in simulation AND dashboard view)
+  // Leak level simulator logic
   useEffect(() => {
     if (!isSimulation || view !== 'dashboard') return;
 
-    const simInterval = setInterval(() => {
-      const prevVal = simRandomWalkRef.current;
-      
-      let methaneDrift = (Math.random() - 0.5) * 20;
-      let ammoniaDrift = (Math.random() - 0.5) * 5;
+    // Calculate PPM metrics based on simulator slider
+    const simulatedMethane = (leakLevel / 100) * 1800 + (Math.random() - 0.5) * 20 + 30;
+    const simulatedAmmonia = (leakLevel / 100) * 550 + (Math.random() - 0.5) * 5 + 10;
 
-      const spikeRoll = Math.random();
-      if (spikeRoll < 0.02) {
-        methaneDrift = 900 + Math.random() * 400; 
-      } else if (spikeRoll < 0.04) {
-        ammoniaDrift = 280 + Math.random() * 80;  
-      }
+    const finalMethane = Math.max(10.0, simulatedMethane);
+    const finalAmmonia = Math.max(5.0, simulatedAmmonia);
 
-      let newMethane = Math.max(20.0, prevVal.methane + methaneDrift);
-      let newAmmonia = Math.max(5.0, prevVal.ammonia + ammoniaDrift);
+    const isMethaneHigh = finalMethane > 1000;
+    const isAmmoniaHigh = finalAmmonia > 300;
+    const isDangerousVal = isMethaneHigh || isAmmoniaHigh;
+    const statusText = isDangerousVal ? "Danger: High gas levels detected!" : "Gas levels are normal.";
 
-      if (newMethane > 2000) newMethane = 1800;
-      if (newAmmonia > 600) newAmmonia = 500;
+    setGasData({
+      methane: finalMethane,
+      ammonia: finalAmmonia,
+      isDangerous: isDangerousVal,
+      status: statusText
+    });
 
-      simRandomWalkRef.current = { methane: newMethane, ammonia: newAmmonia };
+    setStats(prev => ({
+      methaneMax: Math.max(prev.methaneMax, finalMethane),
+      methaneMin: prev.methaneMin === 9999 ? finalMethane : Math.min(prev.methaneMin, finalMethane),
+      ammoniaMax: Math.max(prev.ammoniaMax, finalAmmonia),
+      ammoniaMin: prev.ammoniaMin === 9999 ? finalAmmonia : Math.min(prev.ammoniaMin, finalAmmonia)
+    }));
 
-      const isMethaneHigh = newMethane > 1000;
-      const isAmmoniaHigh = newAmmonia > 300;
-      const isDangerousVal = isMethaneHigh || isAmmoniaHigh;
-      const statusText = isDangerousVal ? "Danger: High gas levels detected!" : "Gas levels are normal.";
+    // Trigger log updates on spike transition
+    if (isDangerousVal && !prevDangerousRef.current) {
+      addLog(`SIMULATION CRITICAL: Gas warning levels exceeded! (${statusText})`, 'danger');
+    } else if (!isDangerousVal && prevDangerousRef.current) {
+      addLog('Simulation Recovery: Gas levels returned to normal.', 'success');
+    }
+    prevDangerousRef.current = isDangerousVal;
 
-      setGasData({
-        methane: newMethane,
-        ammonia: newAmmonia,
-        isDangerous: isDangerousVal,
-        status: statusText
-      });
+  }, [leakLevel, isSimulation, view]);
 
-      setStats(prev => ({
-        methaneMax: Math.max(prev.methaneMax, newMethane),
-        methaneMin: prev.methaneMin === 9999 ? newMethane : Math.min(prev.methaneMin, newMethane),
-        ammoniaMax: Math.max(prev.ammoniaMax, newAmmonia),
-        ammoniaMin: prev.ammoniaMin === 9999 ? newAmmonia : Math.min(prev.ammoniaMin, newAmmonia)
-      }));
+  // Telemetry updates history interval tracker
+  useEffect(() => {
+    if (view !== 'dashboard' || (view === 'dashboard' && gasData.methane === 0 && gasData.ammonia === 0)) return;
 
+    const historyInterval = setInterval(() => {
       setHistory(prev => {
         const newHistory = [...prev, {
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          methane: newMethane,
-          ammonia: newAmmonia
+          methane: gasData.methane,
+          ammonia: gasData.ammonia
         }];
         if (newHistory.length > 30) {
           newHistory.shift();
         }
         return newHistory;
       });
-
-      if (isDangerousVal && !prevDangerousRef.current) {
-        addLog(`SIMULATION CRITICAL: Gas warning levels exceeded! (${statusText})`, 'danger');
-      } else if (!isDangerousVal && prevDangerousRef.current) {
-        addLog('Simulation Recovery: Gas levels returned to normal.', 'success');
-      }
-
-      prevDangerousRef.current = isDangerousVal;
     }, fetchInterval);
 
-    return () => clearInterval(simInterval);
-  }, [isSimulation, fetchInterval, view]);
+    return () => clearInterval(historyInterval);
+  }, [gasData.methane, gasData.ammonia, fetchInterval, view]);
 
   // Data Polling Loop (Only active when NOT simulating AND in dashboard view)
   useEffect(() => {
@@ -329,24 +330,16 @@ function App() {
           status: data.status || 'Active'
         });
 
+        // Set the leak level approximate percentage to drive the live schematic visual
+        const approxLeak = Math.max((methaneVal / 1800) * 100, (ammoniaVal / 550) * 100);
+        setLeakLevel(Math.min(approxLeak, 100));
+
         setStats(prev => ({
           methaneMax: Math.max(prev.methaneMax, methaneVal),
           methaneMin: prev.methaneMin === 9999 ? methaneVal : Math.min(prev.methaneMin, methaneVal),
           ammoniaMax: Math.max(prev.ammoniaMax, ammoniaVal),
           ammoniaMin: prev.ammoniaMin === 9999 ? ammoniaVal : Math.min(prev.ammoniaMin, ammoniaVal)
         }));
-
-        setHistory(prev => {
-          const newHistory = [...prev, {
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-            methane: methaneVal,
-            ammonia: newAmmonia
-          }];
-          if (newHistory.length > 30) {
-            newHistory.shift();
-          }
-          return newHistory;
-        });
 
         if (isDangerousVal && !prevDangerousRef.current) {
           addLog(`CRITICAL ALERT: Hazardous gas levels exceeded! (${data.status})`, 'danger');
@@ -647,25 +640,7 @@ function App() {
         <path d={buildPath(pointsMethane)} className="chart-line-methane" />
         <path d={buildPath(pointsAmmonia)} className="chart-line-ammonia" />
 
-        {/* Last node dots */}
-        {hoveredIndex === null && pointsMethane.length > 0 && (
-          <>
-            <circle cx={pointsMethane[pointsMethane.length - 1].x} cy={pointsMethane[pointsMethane.length - 1].y} r="5" fill="var(--accent-cyan)" />
-            <circle cx={pointsMethane[pointsMethane.length - 1].x} cy={pointsMethane[pointsMethane.length - 1].y} r="10" fill="none" stroke="var(--accent-cyan)" strokeOpacity="0.5" strokeWidth="1.5">
-              <animate attributeName="r" values="5;12;5" dur="1.5s" repeatCount="indefinite" />
-            </circle>
-          </>
-        )}
-        {hoveredIndex === null && pointsAmmonia.length > 0 && (
-          <>
-            <circle cx={pointsAmmonia[pointsAmmonia.length - 1].x} cy={pointsAmmonia[pointsAmmonia.length - 1].y} r="5" fill="var(--accent-purple)" />
-            <circle cx={pointsAmmonia[pointsAmmonia.length - 1].x} cy={pointsAmmonia[pointsAmmonia.length - 1].y} r="10" fill="none" stroke="var(--accent-purple)" strokeOpacity="0.5" strokeWidth="1.5">
-              <animate attributeName="r" values="5;12;5" dur="1.5s" repeatCount="indefinite" />
-            </circle>
-          </>
-        )}
-
-        {/* Interactive hover elements */}
+        {/* Tooltip Overlay */}
         {hoveredIndex !== null && hoveredData && (
           <g>
             <line 
@@ -700,6 +675,166 @@ function App() {
           className="chart-interactive-overlay" 
         />
       </svg>
+    );
+  };
+
+  // Interactive P&ID industrial Schematic SVG renderer
+  const renderPIDSchematic = () => {
+    const isMethaneDangerous = gasData.methane > 1000;
+    const isAmmoniaDangerous = gasData.ammonia > 300;
+    const isSystemDangerous = isMethaneDangerous || isAmmoniaDangerous;
+
+    // Define colors dynamically based on gas metrics
+    const flowColor = isSystemDangerous ? 'var(--color-danger)'
+                    : (gasData.methane > 500 || gasData.ammonia > 150) ? 'var(--color-warning)'
+                    : 'var(--accent-cyan)';
+
+    const wireMethaneColor = isMethaneDangerous ? 'var(--color-danger)'
+                           : (gasData.methane > 500) ? 'var(--color-warning)'
+                           : 'var(--text-muted)';
+
+    const wireAmmoniaColor = isAmmoniaDangerous ? 'var(--color-danger)'
+                           : (gasData.ammonia > 150) ? 'var(--color-warning)'
+                           : 'var(--text-muted)';
+
+    return (
+      <div className="pid-visualizer-container">
+        <div className="pid-schematic-wrapper">
+          <svg viewBox="0 0 600 240" className="pid-svg">
+            <defs>
+              <filter id="glow-danger" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+
+            {/* Industrial pipeline shape */}
+            <path 
+              d="M 30,70 L 220,70 L 220,120 L 380,120 L 380,70 L 570,70" 
+              className="pid-pipe" 
+            />
+
+            {/* Flow path overlays */}
+            <path 
+              d="M 30,70 L 220,70 L 220,120 L 380,120 L 380,70 L 570,70" 
+              className="pid-flow-line" 
+              stroke={flowColor}
+              style={{ filter: isSystemDangerous ? 'url(#glow-danger)' : 'none' }}
+            />
+
+            {/* Pipeline arrows */}
+            <path d="M 60,70 L 50,65 L 50,75 Z" fill={flowColor} />
+            <path d="M 540,70 L 530,65 L 530,75 Z" fill={flowColor} />
+
+            {/* MQ-6 Methane Sensor Node */}
+            <g transform="translate(130, 70)">
+              <rect x="-16" y="-30" width="32" height="30" rx="4" className="pid-sensor-capsule" />
+              <line x1="-12" y1="-15" x2="12" y2="-15" stroke="var(--card-border)" strokeWidth="1.5" />
+              <line x1="-12" y1="-10" x2="12" y2="-10" stroke="var(--card-border)" strokeWidth="1.5" />
+              <text x="0" y="-36" textAnchor="middle" className="pid-node-text" fill="var(--text-primary)">MQ-6 (CH₄)</text>
+              <circle cx="0" cy="-5" r="4" fill={isMethaneDangerous ? 'var(--color-danger)' : 'var(--color-safe)'} />
+            </g>
+
+            {/* MQ-135 Ammonia Sensor Node */}
+            <g transform="translate(470, 70)">
+              <rect x="-16" y="-30" width="32" height="30" rx="4" className="pid-sensor-capsule" />
+              <line x1="-12" y1="-15" x2="12" y2="-15" stroke="var(--card-border)" strokeWidth="1.5" />
+              <line x1="-12" y1="-10" x2="12" y2="-10" stroke="var(--card-border)" strokeWidth="1.5" />
+              <text x="0" y="-36" textAnchor="middle" className="pid-node-text" fill="var(--text-primary)">MQ-135 (NH₃)</text>
+              <circle cx="0" cy="-5" r="4" fill={isAmmoniaDangerous ? 'var(--color-danger)' : 'var(--color-safe)'} />
+            </g>
+
+            {/* ESP32 Microcontroller Node */}
+            <g transform="translate(260, 160)">
+              <rect width="80" height="50" rx="6" className="pid-mcu-shape" fill="var(--card-bg)" />
+              <text x="40" y="22" textAnchor="middle" fontWeight="bold" fontSize="11" fill="var(--text-primary)">ESP32 MCU</text>
+              <text x="40" y="38" textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontFamily="monospace">
+                {isSimulation ? 'SIMULATOR' : 'HARDWARE'}
+              </text>
+              {/* Pin dots */}
+              <circle cx="0" cy="15" r="2" fill="var(--text-muted)" />
+              <circle cx="0" cy="25" r="2" fill="var(--text-muted)" />
+              <circle cx="0" cy="35" r="2" fill="var(--text-muted)" />
+              <circle cx="80" cy="15" r="2" fill="var(--text-muted)" />
+              <circle cx="80" cy="25" r="2" fill="var(--text-muted)" />
+              <circle cx="80" cy="35" r="2" fill="var(--text-muted)" />
+            </g>
+
+            {/* Active Buzzer Unit Node */}
+            <g transform="translate(110, 165)">
+              <circle cx="20" cy="20" r="18" fill="var(--social-bg)" stroke="var(--card-border)" strokeWidth="1.5" />
+              <circle cx="20" cy="20" r="4" fill="var(--text-primary)" />
+              {/* Buzzer icon / alerts */}
+              <Bell 
+                x="10" 
+                y="10" 
+                size={20} 
+                className="pid-buzzer-bell" 
+                style={{ 
+                  color: isSystemDangerous ? 'var(--color-danger)' : 'var(--text-muted)',
+                  transform: isSystemDangerous ? 'rotate(15deg) scale(1.1)' : 'none',
+                  transformOrigin: '20px 20px'
+                }} 
+              />
+              <text x="20" y="48" textAnchor="middle" className="pid-node-text">Buzzer</text>
+            </g>
+
+            {/* Signal Wires connecting everything */}
+            {/* MQ-6 wire to ESP32 */}
+            <path 
+              d="M 130,70 L 130,185 L 260,185" 
+              className="pid-wire"
+              stroke={wireMethaneColor}
+            />
+
+            {/* MQ-135 wire to ESP32 */}
+            <path 
+              d="M 470,70 L 470,185 L 340,185" 
+              className="pid-wire"
+              stroke={wireAmmoniaColor}
+            />
+
+            {/* ESP32 output wire to Buzzer */}
+            <path 
+              d="M 260,195 L 148,195" 
+              className="pid-wire"
+              stroke={isSystemDangerous ? 'var(--color-danger)' : 'var(--text-muted)'}
+            />
+
+            {/* Label texts overlay */}
+            <text x="50" y="105" className="pid-node-text" fill="var(--text-muted)">REFINERY PIPELINE</text>
+          </svg>
+        </div>
+
+        {/* Gas leak simulation slider */}
+        <div className="leak-slider-container">
+          <div className="slider-header">
+            <span className="slider-label">
+              {isSimulation ? 'Leak Simulator Slider' : 'Live Hardware Stream'}
+            </span>
+            <span 
+              className="slider-val-readout"
+              style={{ color: isSystemDangerous ? 'var(--color-danger)' : 'var(--text-secondary)' }}
+            >
+              {isSimulation ? `Leak Level: ${leakLevel}%` : 'Readings Locked to ESP32'}
+            </span>
+          </div>
+          <input 
+            type="range" 
+            min="0" 
+            max="100" 
+            value={leakLevel} 
+            onChange={(e) => setLeakLevel(Number(e.target.value))}
+            className="leak-slider"
+            disabled={!isSimulation}
+          />
+          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
+            {isSimulation 
+              ? 'Move the slider to simulate gas concentration spikes. Levels above 50% trigger alarms.' 
+              : 'Switch to Demo/Simulation Mode in connection settings to unlock this leak slider.'}
+          </p>
+        </div>
+      </div>
     );
   };
 
@@ -948,7 +1083,7 @@ function App() {
         </footer>
       </div>
     ) : (
-      /* TELEMETRY CONSOLE VIEW */
+      /* TELEMETRY CONSOLE BENTO GRID VIEW */
       <div className="app-container">
         {/* Console Header */}
         <header className="app-header">
@@ -960,8 +1095,8 @@ function App() {
             <Activity className="header-icon" size={24} />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h1 style={{ fontSize: '20px', margin: 0 }}>HAZGUARD CONSOLE</h1>
-                {isDangerous && (
+                <h1 style={{ fontSize: '20px', margin: 0 }}>HAZGUARD HUB</h1>
+                {gasData.isDangerous && (
                   <div className="simulation-active-badge" style={{ background: 'var(--color-danger-glow)', color: 'var(--color-danger)', borderColor: 'rgba(239,68,68,0.2)' }}>
                     <span style={{ background: 'var(--color-danger)' }}></span>DANGER
                   </div>
@@ -1088,131 +1223,188 @@ function App() {
           </div>
         )}
 
-        {/* Metrics Grid with circular gauges */}
-        <section className="dashboard-grid">
-          {/* Methane Gas Card */}
-          <div className={`sensor-card ${methaneLevel}`}>
-            <div className="sensor-header">
-              <div className="sensor-info">
-                <span className="sensor-type">Combustible Gas</span>
-                <h2 className="sensor-name">Methane (CH₄)</h2>
+        {/* ==========================================================================
+           Unified Bento Grid System
+           ========================================================================== */}
+        <section className="bento-grid">
+          
+          {/* Card 1: Telemetry Gauges (Span 2) */}
+          <div className="bento-card bento-card-telemetry">
+            <div className="sensor-header" style={{ borderBottom: '1px solid var(--card-border)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Cpu size={18} className="text-secondary" />
+                <h2 style={{ fontSize: '16px', fontWeight: '800' }}>Active Gas Telemetry</h2>
               </div>
-              <div className="sensor-icon-wrapper">
-                <Flame size={20} />
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>REAL-TIME ANALYSIS</span>
+            </div>
+
+            <div className="telemetry-split">
+              {/* Methane Subcard */}
+              <div className={`sensor-subcard ${methaneLevel}`}>
+                <div className="sensor-header">
+                  <div className="sensor-info">
+                    <span className="sensor-type">Combustible Gas</span>
+                    <h3 className="sensor-name">Methane (CH₄)</h3>
+                  </div>
+                  <div className="sensor-icon-wrapper">
+                    <Flame size={18} />
+                  </div>
+                </div>
+                
+                {renderCircularGauge(gasData.methane, 1000, methaneLevel)}
+
+                <div className="sensor-stats-grid">
+                  <div className="stat-item">
+                    <span className="stat-label">Session Max</span>
+                    <span className="stat-value">{stats.methaneMax.toFixed(1)} ppm</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Session Min</span>
+                    <span className="stat-value">
+                      {stats.methaneMin === 9999 ? '0.0' : stats.methaneMin.toFixed(1)} ppm
+                    </span>
+                  </div>
+                </div>
               </div>
+
+              {/* Ammonia Subcard */}
+              <div className={`sensor-subcard ${ammoniaLevel}`}>
+                <div className="sensor-header">
+                  <div className="sensor-info">
+                    <span className="sensor-type">Toxic Gas / AQI</span>
+                    <h3 className="sensor-name">Ammonia (NH₃)</h3>
+                  </div>
+                  <div className="sensor-icon-wrapper">
+                    <Wind size={18} />
+                  </div>
+                </div>
+
+                {renderCircularGauge(gasData.ammonia, 300, ammoniaLevel)}
+
+                <div className="sensor-stats-grid">
+                  <div className="stat-item">
+                    <span className="stat-label">Session Max</span>
+                    <span className="stat-value">{stats.ammoniaMax.toFixed(1)} ppm</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Session Min</span>
+                    <span className="stat-value">
+                      {stats.ammoniaMin === 9999 ? '0.0' : stats.ammoniaMin.toFixed(1)} ppm
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Interactive SVG P&ID Schematic Simulator (Span 1, Row Span 2) */}
+          <div className="bento-card bento-card-visual">
+            <div className="sensor-header" style={{ borderBottom: '1px solid var(--card-border)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Server size={18} className="text-secondary" />
+                <h2 style={{ fontSize: '16px', fontWeight: '800' }}>Schematic P&ID Flow</h2>
+              </div>
+            </div>
+
+            {renderPIDSchematic()}
+
+            <div style={{ borderTop: '1px solid var(--card-border)', paddingTop: '12px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
+                <img 
+                  src="/hazguard_sensor_3d.jpg" 
+                  alt="HazGuard 3D Node" 
+                  style={{ width: '60px', height: '40px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--card-border)' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-primary)' }}>3D Physical Node</span>
+                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Node Active at 14 BAR Pressure</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Historical Trend Charts (Span 2) */}
+          <div className="bento-card bento-card-chart">
+            <div className="chart-header" style={{ borderBottom: '1px solid var(--card-border)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Database size={18} className="text-secondary" />
+                <h2 style={{ fontSize: '16px', fontWeight: '800' }}>Real-Time Level Trends</h2>
+              </div>
+              <div className="chart-legend">
+                <div className="legend-item">
+                  <span className="legend-color methane"></span>
+                  <span>CH₄ (Methane)</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color ammonia"></span>
+                  <span>NH₃ (Ammonia)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="svg-chart-container">
+              {renderSvgChart()}
+            </div>
+          </div>
+
+          {/* Card 4: Historical Logs list (Span 2) */}
+          <div className="bento-card bento-card-logs">
+            <div className="log-header" style={{ borderBottom: '1px solid var(--card-border)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Activity size={18} className="text-secondary" />
+                <h2 style={{ fontSize: '16px', fontWeight: '800' }}>Telemetry & Warning History</h2>
+              </div>
+              <button className="clear-log-btn" onClick={handleClearLogs}>
+                <Trash2 size={11} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} />
+                Clear Logs
+              </button>
+            </div>
+
+            <div className="log-list">
+              {eventLogs.map((log) => {
+                const LogIcon = log.type === 'danger' ? AlertTriangle 
+                              : log.type === 'warning' ? AlertTriangle 
+                              : log.type === 'success' ? CheckCircle2 
+                              : Info;
+                return (
+                  <div key={log.id} className={`log-item ${log.type}`}>
+                    <LogIcon size={14} className="log-icon" />
+                    <span className="log-time">[{log.time}]</span>
+                    <span className="log-message">{log.message}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Card 5: Console Exporter & Session resets (Span 1) */}
+          <div className="bento-card bento-card-controls">
+            <div className="sensor-header" style={{ borderBottom: '1px solid var(--card-border)', paddingBottom: '12px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: '800' }}>Console Actions</h2>
             </div>
             
-            {/* Custom Circular SVG Gauge */}
-            {renderCircularGauge(gasData.methane, 1000, methaneLevel)}
-
-            <div className="sensor-stats-grid">
-              <div className="stat-item">
-                <span className="stat-label">Session Max</span>
-                <span className="stat-value">{stats.methaneMax.toFixed(1)} ppm</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-label">Session Min</span>
-                <span className="stat-value">
-                  {stats.methaneMin === 9999 ? '0.0' : stats.methaneMin.toFixed(1)} ppm
-                </span>
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', justifyContent: 'center' }}>
+              <button 
+                onClick={handleExportCSV}
+                className="btn-secondary"
+                style={{ width: '100%', justifyContent: 'center', padding: '10px' }}
+                title="Export telemetry history to CSV file"
+              >
+                <Download size={14} />
+                Export CSV Logs
+              </button>
+              
+              <button 
+                onClick={handleResetStats}
+                className="btn-secondary"
+                style={{ width: '100%', justifyContent: 'center', padding: '10px' }}
+              >
+                <RefreshCw size={14} />
+                Reset Session stats
+              </button>
             </div>
           </div>
 
-          {/* Ammonia Gas Card */}
-          <div className={`sensor-card ${ammoniaLevel}`}>
-            <div className="sensor-header">
-              <div className="sensor-info">
-                <span className="sensor-type">Toxic Gas / Air Quality</span>
-                <h2 className="sensor-name">Ammonia (NH₃)</h2>
-              </div>
-              <div className="sensor-icon-wrapper">
-                <Wind size={20} />
-              </div>
-            </div>
-
-            {/* Custom Circular SVG Gauge */}
-            {renderCircularGauge(gasData.ammonia, 300, ammoniaLevel)}
-
-            <div className="sensor-stats-grid">
-              <div className="stat-item">
-                <span className="stat-label">Session Max</span>
-                <span className="stat-value">{stats.ammoniaMax.toFixed(1)} ppm</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-label">Session Min</span>
-                <span className="stat-value">
-                  {stats.ammoniaMin === 9999 ? '0.0' : stats.ammoniaMin.toFixed(1)} ppm
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* SVG Historical Chart Panel */}
-        <section className="chart-panel">
-          <div className="chart-header">
-            <h2 className="chart-title">Real-Time Level Trends</h2>
-            <div className="chart-legend">
-              <div className="legend-item">
-                <span className="legend-color methane"></span>
-                <span>Methane (0-2000 ppm)</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-color ammonia"></span>
-                <span>Ammonia (0-600 ppm)</span>
-              </div>
-              {history.length > 0 && (
-                <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
-                  <button 
-                    onClick={handleExportCSV}
-                    className="btn-secondary"
-                    title="Export telemetry history to CSV file"
-                  >
-                    <Download size={12} />
-                    Export CSV
-                  </button>
-                  <button 
-                    onClick={handleResetStats}
-                    className="clear-log-btn" 
-                  >
-                    Reset Stats
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="svg-chart-container">
-            {renderSvgChart()}
-          </div>
-        </section>
-
-        {/* Event Logs Panel */}
-        <section className="log-panel">
-          <div className="log-header">
-            <h2 className="log-title">Telemetry & Alert History</h2>
-            <button className="clear-log-btn" onClick={handleClearLogs}>
-              <Trash2 size={12} style={{ marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }} />
-              Clear
-            </button>
-          </div>
-
-          <div className="log-list">
-            {eventLogs.map((log) => {
-              const LogIcon = log.type === 'danger' ? AlertTriangle 
-                            : log.type === 'warning' ? AlertTriangle 
-                            : log.type === 'success' ? CheckCircle2 
-                            : Info;
-              return (
-                <div key={log.id} className={`log-item ${log.type}`}>
-                  <LogIcon size={14} className="log-icon" />
-                  <span className="log-time">[{log.time}]</span>
-                  <span className="log-message">{log.message}</span>
-                </div>
-              );
-            })}
-          </div>
         </section>
       </div>
     )}
